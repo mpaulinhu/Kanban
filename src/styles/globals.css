@@ -1,0 +1,322 @@
+@import 'tailwindcss';
+
+/* =============================================================================
+   Kanban — tokens de estilo
+
+   Extraído de `apps/corehub/src/styles/globals.css` (CoreHub). Os valores dos
+   tokens `--eh-pm-*` foram amostrados por pixel de capturas autenticadas do
+   board real do Trello — os comentários que explicam cada medição foram
+   preservados, porque são a justificativa de cada número e a razão de não os
+   "arredondarmos" para uma escala genérica.
+
+   Diferença deliberada em relação ao CoreHub: os tokens semânticos do Tailwind
+   (--primary, --ring, --input, --destructive, --accent) são DEFINIDOS aqui. No
+   CoreHub eles não existem (nem no `globals.css`, nem no pacote
+   `@grupo-elo-editorial/design-tokens`), então classes como `bg-primary`,
+   `ring-ring` e `border-input` — usadas à larga no modal de detalhe — hoje
+   renderizam sem cor lá. Mapeando-os para a paleta `--eh-*`, o modal fica
+   visualmente correto aqui sem precisar reescrever as classes.
+   ============================================================================= */
+
+@theme {
+  --color-background: var(--eh-bg);
+  --color-foreground: var(--eh-text);
+  --color-muted: var(--eh-surface-2);
+  --color-muted-foreground: var(--eh-text-2);
+  --color-border: var(--eh-border);
+  --color-input: var(--eh-border-input);
+  --color-ring: var(--eh-primary);
+  --color-primary: var(--eh-primary);
+  --color-primary-foreground: #ffffff;
+  --color-accent: var(--eh-surface-2);
+  --color-accent-foreground: var(--eh-text);
+  --color-destructive: var(--eh-danger);
+  --color-destructive-foreground: #ffffff;
+}
+
+:root {
+  --eh-bg: #eef1f1;
+  --eh-surface: #ffffff;
+  --eh-surface-2: #f6f8f7;
+  --eh-border: #e0e6e4;
+  --eh-border-input: #d3dbd8;
+  --eh-border-hover: #cdd9d4;
+  --eh-divider: #ebefed;
+  --eh-primary: #0c6b5e;
+  --eh-primary-hover: #0a584d;
+  --eh-bar: #1d8273;
+  --eh-bar-track: #eef1f0;
+  --eh-text: #162420;
+  --eh-text-2: #67746f;
+  --eh-text-strong: #1c2b27;
+  --eh-text-3: #46544f;
+  --eh-muted: #889590;
+  --eh-muted-2: #94a09b;
+  --eh-muted-3: #9aa6a2;
+  --eh-muted-4: #7b8884;
+  --eh-warn-bg: #fbe9c9;
+  --eh-warn-fg: #9a6414;
+  --eh-warn-val: #b07d2a;
+  --eh-danger: #c2412c;
+  --eh-danger-hover: #f8e8e4;
+  --eh-success-bg: #f0fdf4;
+  --eh-success-fg: #16a34a;
+  --eh-danger-bg: #fef2f2;
+  --eh-danger-fg: #b91c1c;
+  --eh-danger-border: #fecaca;
+
+  /* Paleta de etiquetas — pares fg/bg fixos, ⩾4,5:1. Nunca usar hex cru de
+     fonte externa (ex.: cores do Trello) direto num chip: os pares abaixo
+     existem porque o hex original reprova AA. `label-neutral` é o fallback
+     para qualquer cor de origem sem par mapeado. */
+  --eh-label-green-bg: #dcf5e4;
+  --eh-label-green-fg: #187a43;
+  --eh-label-blue-bg: #dbe9fb;
+  --eh-label-blue-fg: #1c4f91;
+  --eh-label-yellow-bg: #fbf0c9;
+  --eh-label-yellow-fg: #7d5f0e;
+  --eh-label-red-bg: #fbdfdb;
+  --eh-label-red-fg: #a1301b;
+  --eh-label-purple-bg: #ead9fb;
+  --eh-label-purple-fg: #6b21a8;
+  --eh-label-pink-bg: #fbdcee;
+  --eh-label-pink-fg: #a11e78;
+  --eh-label-lime-bg: #e6f5c9;
+  --eh-label-lime-fg: #4d6a12;
+  --eh-label-orange-bg: #fbe4cf;
+  --eh-label-orange-fg: #a34e10;
+  --eh-label-neutral-bg: var(--eh-bar-track);
+  --eh-label-neutral-fg: var(--eh-text-3);
+
+  /* Variante "solid" das etiquetas — barra colorida sólida no topo do card,
+     estilo Trello, com o nome escrito dentro (WCAG 2.2 AA 1.4.1 — cor nunca
+     é o único portador de informação). Fundos AMOSTRADOS por pixel de uma
+     captura autenticada do board real. `-solid-fg` escolhido por medição
+     individual, ⩾4,5:1 sempre:
+     green #4bce97/#0b3b26 6.34:1 · yellow #eed12b/#4d3800 7.33:1 ·
+     blue #1868db/branco 5.20:1 · pink #ae4787/branco 5.18:1 ·
+     red #c9372c/branco 5.16:1 · purple #cd8de5/#3d1a4d 5.87:1 ·
+     lime #94c748/#243505 6.63:1 · orange #e5941c/#3d2400 5.92:1. */
+  --eh-label-green-solid-bg: #4bce97;
+  --eh-label-green-solid-fg: #0b3b26;
+  --eh-label-blue-solid-bg: #1868db;
+  --eh-label-blue-solid-fg: #ffffff;
+  --eh-label-yellow-solid-bg: #eed12b;
+  --eh-label-yellow-solid-fg: #4d3800;
+  --eh-label-red-solid-bg: #c9372c;
+  --eh-label-red-solid-fg: #ffffff;
+  --eh-label-purple-solid-bg: #cd8de5;
+  --eh-label-purple-solid-fg: #3d1a4d;
+  --eh-label-pink-solid-bg: #ae4787;
+  --eh-label-pink-solid-fg: #ffffff;
+  --eh-label-lime-solid-bg: #94c748;
+  --eh-label-lime-solid-fg: #243505;
+  --eh-label-orange-solid-bg: #e5941c;
+  --eh-label-orange-solid-fg: #3d2400;
+  --eh-label-neutral-solid-bg: var(--eh-muted-2);
+  --eh-label-neutral-solid-fg: #ffffff;
+
+  /* Fundo do quadro estilo Trello — gradiente diagonal amostrado por pixel de
+     uma captura autenticada: canto superior-esquerdo rgb(24,101,70)=#186546
+     (verde escuro) → canto inferior-direito rgb(95,197,208)=#5fc5d0
+     (turquesa claro). Não é cor chapada — ~6 pontos amostrados confirmaram
+     progressão diagonal, não um degradê vertical simples. */
+  --eh-pm-board-bg: linear-gradient(135deg, #186546 0%, #359a82 55%, #5fc5d0 100%);
+  /* Literal, sem transparência — rgb(241,242,244) exato. */
+  --eh-pm-board-column-bg: rgb(241, 242, 244);
+  /* Cabeçalho de coluna E título do card. Medindo o pixel MAIS ESCURO — o
+     núcleo da letra, não a média que inclui as bordas anti-serrilhadas, que
+     puxam a amostra pro claro — o Trello usa #292a2e. 13,9:1 sobre branco. */
+  --eh-pm-board-column-header-fg: #292a2e;
+  --eh-pm-card-title-fg: #292a2e;
+  /* Alias geral pro MESMO tom escuro acima — todo texto "de leitura" do
+     modal. O antigo `--eh-text-2` sobre `--eh-pm-neutral-surface` media
+     4,36:1, JÁ reprovando AA (4,5:1). */
+  --eh-pm-modal-text: #292a2e;
+  /* Alias semântico — MESMO valor de `--eh-pm-board-column-bg`, reaproveitado
+     em vez de duplicado: chip da coluna, pílulas de ação e coluna direita do
+     modal usam esse cinza-claro em 4+ lugares. Nome próprio porque, no
+     contexto do modal, não é "fundo de coluna do board" — é "superfície
+     neutra". */
+  --eh-pm-neutral-surface: var(--eh-pm-board-column-bg);
+
+  /* Cabeçalho do quadro — camada preta translúcida SOBRE o gradiente do
+     quadro (pintado no container PAI, não repetido aqui — é o que evita a
+     costura visível).
+
+     Overlay .2, não .18: o "pior caso" de contraste não é a ponta mais clara
+     do gradiente inteiro (#5fc5d0), porque o cabeçalho é uma faixa de 48px no
+     TOPO e um gradiente 135deg nunca alcança sua própria extremidade dentro
+     dessa faixa. Projetando o gradiente real sobre a faixa em viewports de
+     1280–2560px, o ponto mais claro que ele cobre é ~#48ada5 (pior caso
+     real). Aí rgba(0,0,0,.18) dá 4,41:1 (reprova) e rgba(0,0,0,.2) dá 4,59:1
+     (passa). */
+  --eh-pm-header-fg: #ffffff;
+  --eh-pm-header-fg-muted: rgba(255, 255, 255, 0.75);
+  /* Pílulas do header — PRETO translúcido, não branco. Branco translúcido
+     sobre o overlay do header CLAREIA o composto (duas camadas translúcidas
+     na mesma direção "clara") e o texto branco cai pra 3,17:1 no pior caso
+     real — reprova AA. Só passaria com o header tão opaco (.7) que deixaria
+     de parecer fundido. Preto translúcido preserva o mesmo efeito visual sem
+     esse conflito: 6,65:1 (normal) / 7,80:1 (ativa). */
+  --eh-pm-header-surface: rgba(0, 0, 0, 0.15);
+  --eh-pm-header-surface-active: rgba(0, 0, 0, 0.25);
+  --eh-pm-header-border: rgba(255, 255, 255, 0.25);
+
+  --eh-toast-bg: #1f2a27;
+  --eh-toast-fg: #eef2f1;
+  --eh-toast-dot: #3fae8c;
+  --eh-focus-ring: rgba(12, 107, 94, 0.12);
+  --eh-shadow-card: 0 2px 8px rgba(20, 40, 34, 0.05);
+  --eh-shadow-menu: 0 10px 28px -6px rgba(20, 40, 34, 0.22);
+  --eh-font: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+
+  /* Fundo suave da cor primária, derivado via color-mix para acompanhar
+     automaticamente o tema. */
+  --eh-primary-soft: color-mix(in srgb, var(--eh-primary) 12%, transparent);
+}
+
+[data-theme='dark'] {
+  --eh-bg: #10171a;
+  --eh-surface: #182126;
+  --eh-surface-2: #1e282d;
+  --eh-border: #2a353b;
+  --eh-border-input: #36434a;
+  --eh-border-hover: #40505a;
+  --eh-divider: #232e34;
+  --eh-primary: #2f9e8c;
+  --eh-primary-hover: #37b09c;
+  --eh-bar: #2f9e8c;
+  --eh-bar-track: #222d33;
+  --eh-text: #e6edf0;
+  --eh-text-2: #9aa8ae;
+  --eh-text-strong: #f2f7f9;
+  --eh-text-3: #b8c4c9;
+  --eh-muted: #89969d;
+  --eh-muted-2: #8b989e;
+  --eh-muted-3: #7e8b91;
+  --eh-muted-4: #94a1a7;
+  --eh-warn-bg: #3d2f12;
+  --eh-warn-fg: #e3b765;
+  --eh-warn-val: #d9a94e;
+  --eh-danger: #e0705c;
+  --eh-danger-hover: #3a201c;
+  --eh-success-bg: #14301f;
+  --eh-success-fg: #4ade80;
+  --eh-danger-bg: #331a1a;
+  --eh-danger-fg: #f87171;
+  --eh-danger-border: #5c2a2a;
+
+  --eh-pm-board-bg: linear-gradient(135deg, #0d2e21 0%, #17564c 55%, #276e69 100%);
+  --eh-pm-board-column-bg: rgba(38, 54, 63, 0.8);
+  --eh-pm-board-column-header-fg: #e6edf0;
+  --eh-pm-card-title-fg: #e6edf0;
+  --eh-pm-modal-text: #e6edf0;
+
+  --eh-toast-bg: #e7ecf3;
+  --eh-toast-fg: #10141f;
+  --eh-toast-dot: #4a8fd6;
+}
+
+body {
+  font-family: var(--eh-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+}
+
+/* Campo de busca do cabeçalho — `::placeholder` não é declarável via style
+   inline do React, por isso esta regra de classe. */
+.eh-pm-header-input::placeholder {
+  color: var(--eh-pm-header-fg-muted);
+}
+
+/* Busca minimalista: em repouso o campo é só um fundo translúcido, sem borda
+   visível — a definição vem no hover/foco. */
+.eh-pm-header-input:hover,
+.eh-pm-header-input:focus {
+  background: var(--eh-pm-header-surface-active);
+}
+
+.eh-pm-header-input:focus {
+  border-color: var(--eh-pm-header-border);
+}
+
+/* "Nova coluna" — branco translúcido sobre o gradiente, como o "Adicionar
+   outra lista" do Trello. O `!important` é necessário, não descuido: o
+   `background` de repouso é declarado INLINE (depende de runtime), e estilo
+   inline vence qualquer seletor de classe. */
+.eh-pm-add-column:hover {
+  background: rgba(255, 255, 255, 0.34) !important;
+}
+
+/* Botões do cabeçalho. Repouso sem fundo/borda (`transparent` explícito
+   sobrescreve o `border` inline que cada botão define para o estado ATIVO). */
+.eh-pm-header-btn {
+  background: transparent;
+  border-color: transparent;
+}
+.eh-pm-header-btn:hover {
+  background: var(--eh-pm-header-surface);
+}
+.eh-pm-header-btn[data-active='true'] {
+  background: var(--eh-pm-header-surface-active);
+  border-color: var(--eh-pm-header-fg);
+}
+
+/* Linha de anexo clicável: hover em classe CSS, não em onMouseEnter mutando
+   style inline — inline sempre venceria o outline de :focus-visible, deixando
+   o foco por teclado invisível assim que o mouse também estivesse em cima.
+   :not(:disabled) — sem essa guarda o hover sugeriria uma ação que não
+   existe em itens desabilitados. */
+.eh-attachment-row:not(:disabled):hover {
+  background: var(--eh-primary-soft) !important;
+}
+
+@keyframes eh-toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(14px) scale(.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Destaque temporário de um card ao chegar via link. 0%/100% usam
+   `--eh-highlight-rest-color` (default `transparent`) em vez de um valor
+   fixo: quando a animação termina, o navegador volta pro `background-color`
+   real do elemento — se esse valor não for EXATAMENTE igual ao do fim do
+   keyframe, ele salta sem transição. O card TEM `background` fixo próprio,
+   então redefine a variável localmente. */
+@keyframes eh-task-highlight-pulse {
+  0%   { background-color: var(--eh-highlight-rest-color, transparent); }
+  20%  { background-color: color-mix(in srgb, var(--eh-primary-soft) 55%, transparent); }
+  45%  { background-color: var(--eh-primary-soft); }
+  70%  { background-color: color-mix(in srgb, var(--eh-primary-soft) 55%, transparent); }
+  100% { background-color: var(--eh-highlight-rest-color, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
