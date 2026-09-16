@@ -13,6 +13,7 @@ import { PM_STATUS_CFG } from '../utils'
 import { UserAvatar } from '@/components/UserAvatar/UserAvatar'
 import { InlineEditableText } from './InlineEditableText'
 import { PedagogiaDocumentBody } from './PedagogiaDocumentBody'
+import { ChecklistSection } from './ChecklistSection'
 import { TaskComments } from './TaskComments'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
@@ -107,21 +108,6 @@ const PRIORITY_OPTIONS = [
 ]
 
 type ChecklistStatus = NonNullable<ChecklistItem['status']>
-
-const CHECKLIST_STATUS_META: Record<ChecklistStatus, { label: string; fg: string; bg: string }> = {
-  aguardando:  { label: 'Aguardando',  fg: 'var(--eh-danger)',     bg: 'var(--eh-danger-bg)'  },
-  em_producao: { label: 'Em produção', fg: 'var(--eh-warn-fg)',    bg: 'var(--eh-warn-bg)'    },
-  revisao:     { label: 'Revisão',     fg: 'var(--eh-primary)',    bg: 'var(--eh-bar-track)'  },
-  refazer:     { label: 'Refazer',     fg: 'var(--eh-muted-2)',    bg: 'var(--eh-surface-2)'  },
-  finalizado:  { label: 'Finalizado',  fg: 'var(--eh-success-fg)', bg: 'var(--eh-success-bg)' },
-}
-
-const CHECKLIST_STATUS_ORDER: ChecklistStatus[] = ['aguardando', 'em_producao', 'revisao', 'refazer', 'finalizado']
-
-function resolveChecklistStatus(item: ChecklistItem): ChecklistStatus {
-  if (item.status) return item.status
-  return item.isChecked ? 'finalizado' : 'aguardando'
-}
 
 const STATUS_LABEL: Record<string, string> = {
   done: 'Concluída', in_progress: 'Em andamento', todo: 'A fazer', atrasado: 'Atrasado',
@@ -528,7 +514,6 @@ export function TaskDetailModal({
   const leftColumnRef = useRef<HTMLDivElement>(null)
 
   const [title, setTitle] = useState('')
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [status, setStatus] = useState<PMTask['status']>('todo')
   const [priority, setPriority] = useState('normal')
   const [description, setDescription] = useState('')
@@ -553,35 +538,10 @@ export function TaskDetailModal({
   const [localCaracteres, setLocalCaracteres] = useState(caracteres != null ? String(caracteres) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 })
-  const [editingItemId, setEditingItemId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState('')
-  const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
   // ELO-2978: falhas de exclusão passam a ser visíveis em vez de engolidas.
   const [deleteTaskError, setDeleteTaskError] = useState<string | null>(null)
-  const [deleteItemError, setDeleteItemError] = useState<string | null>(null)
   const [deleteTaskLoading, setDeleteTaskLoading] = useState(false)
-
-  useEffect(() => {
-    if (!openDropdownId) return
-    function onOutside(e: MouseEvent) {
-      const target = e.target as HTMLElement
-      if (target.closest('[data-checklist-dropdown]')) return
-      setOpenDropdownId(null)
-    }
-    function onScrollOrResize() { setOpenDropdownId(null) }
-    document.addEventListener('mousedown', onOutside)
-    window.addEventListener('scroll', onScrollOrResize, true)
-    window.addEventListener('resize', onScrollOrResize)
-    return () => {
-      document.removeEventListener('mousedown', onOutside)
-      window.removeEventListener('scroll', onScrollOrResize, true)
-      window.removeEventListener('resize', onScrollOrResize)
-    }
-  }, [openDropdownId])
 
   useEffect(() => {
     if (!task) return
@@ -1111,6 +1071,11 @@ export function TaskDetailModal({
                     onSaveField={saveField}
                     scrollContainer={leftColumnRef.current}
                     isEditable={isEditable}
+                    onToggleChecklistItem={onToggleChecklistItem}
+                    onUpdateChecklistItemStatus={onUpdateChecklistItemStatus}
+                    onAddChecklistItem={onAddChecklistItem}
+                    onRenameChecklistItem={onRenameChecklistItem}
+                    onDeleteChecklistItem={onDeleteChecklistItem}
                   />
                 </div>
                 {/* Coluna direita — Comentários (ELO-3183). ~1/3 no desktop;
@@ -1410,223 +1375,15 @@ export function TaskDetailModal({
                 </div>
               )}
               {task.source === 'graph' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Checklist
-                    {(task.checklistTotal ?? 0) > 0 && (
-                      <span className="text-muted-foreground font-normal ml-1">
-                        ({task.checklistDone ?? 0}/{task.checklistTotal ?? 0})
-                      </span>
-                    )}
-                  </label>
-                  <div className="space-y-1 mb-2">
-                    {(task.checklist ?? []).map(item => {
-                      const currentStatus = resolveChecklistStatus(item)
-                      const meta = CHECKLIST_STATUS_META[currentStatus]
-                      const isDropdownOpen = openDropdownId === item.id
-                      return (
-                        <div
-                          key={item.id}
-                          style={{ display: 'flex', alignItems: 'flex-start', gap: 6, position: 'relative' }}
-                          data-checklist-dropdown=""
-                        >
-                          {/* badge de status — abre dropdown */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              if (!isDropdownOpen) {
-                                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
-                                setDropdownPos({ top: rect.bottom + 2, left: rect.left })
-                              }
-                              setOpenDropdownId(isDropdownOpen ? null : item.id)
-                            }}
-                            style={{
-                              flexShrink: 0,
-                              fontSize: 10,
-                              fontWeight: 600,
-                              color: meta.fg,
-                              background: meta.bg,
-                              padding: '2px 7px',
-                              borderRadius: 20,
-                              border: 'none',
-                              cursor: 'pointer',
-                              lineHeight: 1.5,
-                              whiteSpace: 'nowrap',
-                              marginTop: 2,
-                            }}
-                          >
-                            {meta.label}
-                          </button>
-                          {editingItemId === item.id ? (
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              onBlur={async () => {
-                                const trimmed = editingTitle.trim()
-                                if (trimmed && trimmed !== item.title) {
-                                  await onRenameChecklistItem?.(item.id, trimmed)
-                                }
-                                setEditingItemId(null)
-                              }}
-                              onKeyDown={async (e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  const trimmed = editingTitle.trim()
-                                  if (trimmed && trimmed !== item.title) {
-                                    await onRenameChecklistItem?.(item.id, trimmed)
-                                  }
-                                  setEditingItemId(null)
-                                } else if (e.key === 'Escape') {
-                                  setEditingItemId(null)
-                                }
-                              }}
-                              className="flex-1 text-sm rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
-                            />
-                          ) : (
-                            <>
-                              <span
-                                className={
-                                  currentStatus === 'finalizado'
-                                    ? 'text-sm line-through text-muted-foreground'
-                                    : 'text-sm'
-                                }
-                              >
-                                {item.title}
-                              </span>
-                              {onRenameChecklistItem && (
-                                <button
-                                  type="button"
-                                  title="Renomear subtarefa"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setEditingItemId(item.id)
-                                    setEditingTitle(item.title)
-                                  }}
-                                  style={{
-                                    flexShrink: 0,
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    padding: '0 2px',
-                                    color: 'var(--eh-muted-2)',
-                                    lineHeight: 1,
-                                    fontSize: 12,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                  }}
-                                  aria-label="Renomear subtarefa"
-                                >
-                                  ✏️
-                                </button>
-                              )}
-                              {onDeleteChecklistItem && (
-                                <button
-                                  type="button"
-                                  title="Excluir subtarefa"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setDeletingItemId(item.id)
-                                  }}
-                                  style={{
-                                    flexShrink: 0,
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    padding: '0 2px',
-                                    color: 'var(--eh-muted-2)',
-                                    lineHeight: 1,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                  }}
-                                  aria-label="Excluir subtarefa"
-                                >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                    <path d="M10 11v6" />
-                                    <path d="M14 11v6" />
-                                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                                  </svg>
-                                </button>
-                              )}
-                            </>
-                          )}
-                          {/* dropdown de seleção de status — portal para escapar do overflow do modal */}
-                          {isDropdownOpen && createPortal(
-                            <div
-                              style={{
-                                position: 'fixed',
-                                top: dropdownPos.top,
-                                left: dropdownPos.left,
-                                zIndex: 200,
-                                background: 'var(--eh-surface)',
-                                border: '1px solid var(--eh-border)',
-                                borderRadius: 8,
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                                padding: 4,
-                                minWidth: 120,
-                              }}
-                              data-checklist-dropdown=""
-                            >
-                              {CHECKLIST_STATUS_ORDER.map((s) => {
-                                const m = CHECKLIST_STATUS_META[s]
-                                const isActive = currentStatus === s
-                                return (
-                                  <button
-                                    key={s}
-                                    type="button"
-                                    onClick={async () => {
-                                      setOpenDropdownId(null)
-                                      if (onUpdateChecklistItemStatus) {
-                                        await onUpdateChecklistItemStatus(item.id, s)
-                                      } else {
-                                        // fallback: usa toggle legado mapeando finalizado → checked
-                                        await onToggleChecklistItem?.(item.id, s === 'finalizado')
-                                      }
-                                    }}
-                                    style={{
-                                      display: 'block',
-                                      width: '100%',
-                                      textAlign: 'left',
-                                      fontSize: 11,
-                                      fontWeight: isActive ? 700 : 500,
-                                      color: m.fg,
-                                      background: isActive ? m.bg : 'transparent',
-                                      padding: '4px 8px',
-                                      borderRadius: 5,
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    {m.label}
-                                  </button>
-                                )
-                              })}
-                            </div>,
-                            document.body,
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {onAddChecklistItem && (
-                    <input
-                      type="text"
-                      placeholder="Novo item... (Enter para adicionar)"
-                      value={newSubtaskTitle}
-                      onChange={e => setNewSubtaskTitle(e.target.value)}
-                      onKeyDown={async (e) => {
-                        if (e.key === 'Enter') {
-                          const t = newSubtaskTitle.trim()
-                          if (t) { await onAddChecklistItem(t); setNewSubtaskTitle('') }
-                        }
-                      }}
-                      className="w-full h-8 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                  )}
-                </div>
+                <ChecklistSection
+                  items={task.checklist ?? []}
+                  isEditable={isEditable}
+                  onToggleItem={onToggleChecklistItem}
+                  onUpdateItemStatus={onUpdateChecklistItemStatus}
+                  onAddItem={onAddChecklistItem}
+                  onRenameItem={onRenameChecklistItem}
+                  onDeleteItem={onDeleteChecklistItem}
+                />
               )}
             </>
             )
@@ -1814,34 +1571,6 @@ export function TaskDetailModal({
         </div>
         )}
       </div>
-      {deletingItemId !== null && (
-        <ConfirmDialog
-          title="Excluir subtarefa?"
-          message={`"${task.checklist?.find((i) => i.id === deletingItemId)?.title ?? ''}" será removida permanentemente da tarefa.`}
-          confirmLabel="Excluir subtarefa"
-          confirmBusyLabel="Excluindo…"
-          variant="danger"
-          loading={deleteLoading}
-          error={deleteItemError}
-          onCancel={() => { setDeletingItemId(null); setDeleteItemError(null) }}
-          onConfirm={async () => {
-            if (!onDeleteChecklistItem) return
-            setDeleteLoading(true)
-            setDeleteItemError(null)
-            try {
-              await onDeleteChecklistItem(deletingItemId)
-              setDeletingItemId(null)
-            } catch (err) {
-              // ELO-2978: sem este catch o erro era engolido e o diálogo
-              // fechava mesmo com a subtarefa intacta no Firestore.
-              console.error('[ELO-2978] Falha ao excluir subtarefa', { itemId: deletingItemId, err })
-              setDeleteItemError('Não foi possível excluir a subtarefa. Tente novamente.')
-            } finally {
-              setDeleteLoading(false)
-            }
-          }}
-        />
-      )}
       {confirmDeleteTask && (
         <ConfirmDialog
           title="Excluir tarefa?"

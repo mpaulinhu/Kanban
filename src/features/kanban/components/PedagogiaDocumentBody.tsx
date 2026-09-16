@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PMOfficeLabel, PMTask, RecurrenceConfig } from '../types/pmOffice'
+import type { ChecklistItem, PMOfficeLabel, PMTask, RecurrenceConfig } from '../types/pmOffice'
 import type { UserRecord } from '../api/usersApi'
 import type { PMTaskPatch } from '../api/pmOfficeApi'
 import { createPMOfficeLabel, setPMTaskLabel, updatePMOfficeLabel } from '../api/marketingPlannerApi'
@@ -12,7 +12,10 @@ import { MemberProfilePopover } from './MemberProfilePopover'
 import { ActionPill, ModalDatePicker, AssigneeSelect, dateToTs } from './TaskDetailModal'
 import { RecurrenceControl } from './RecurrenceControl'
 import { TaskAttachments } from './TaskAttachments'
+import { ChecklistSection } from './ChecklistSection'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+
+type ChecklistStatus = NonNullable<ChecklistItem['status']>
 
 /** Resolve a foto do usuário por nome exato (case-insensitive), só quando único. */
 function findPhotoByName(name: string, users: UserRecord[]): string | undefined {
@@ -78,6 +81,11 @@ export function PedagogiaDocumentBody({
   onSaveField,
   scrollContainer,
   isEditable,
+  onToggleChecklistItem,
+  onUpdateChecklistItemStatus,
+  onAddChecklistItem,
+  onRenameChecklistItem,
+  onDeleteChecklistItem,
 }: {
   task: PMTask
   users: UserRecord[]
@@ -101,6 +109,12 @@ export function PedagogiaDocumentBody({
   scrollContainer: HTMLElement | null
   /** ELO-3184: Viewer (`!isEditable`) vê e abre anexos, mas não sobe nem exclui. */
   isEditable: boolean
+  /** Subtarefas (checklist) — mesmos callbacks já fiados na página do quadro para o modo formulário clássico; o modo documento não os tinha até aqui. */
+  onToggleChecklistItem?: (itemId: string, checked: boolean) => Promise<void>
+  onUpdateChecklistItemStatus?: (itemId: string, status: ChecklistStatus) => Promise<void>
+  onAddChecklistItem?: (title: string) => Promise<void>
+  onRenameChecklistItem?: (itemId: string, newTitle: string) => Promise<void>
+  onDeleteChecklistItem?: (itemId: string) => Promise<void>
 }) {
   const [showDates, setShowDates] = useState(false)
   const [showMembers, setShowMembers] = useState(false)
@@ -113,11 +127,13 @@ export function PedagogiaDocumentBody({
   // não precisa duplicar dado) e sua própria ref de âncora para posicionar.
   const [profilePopoverIndex, setProfilePopoverIndex] = useState<number | null>(null)
   const memberBtnRefs = useRef<Record<number, HTMLButtonElement | null>>({})
-  // Anexos é seção FIXA (sempre visível, abaixo de Descrição) — a pílula não
-  // alterna visibilidade como Datas/Membros, só rola até lá (mesmo padrão do
-  // comentário de `ActionPill` em TaskDetailModal.tsx: "Só para seções que JÁ
-  // existem no corpo (rola até lá)").
+  // Anexos e Checklist são seções FIXAS (sempre visíveis, abaixo de
+  // Descrição) — a pílula não alterna visibilidade como Datas/Membros, só
+  // rola até lá (mesmo padrão do comentário de `ActionPill` em
+  // TaskDetailModal.tsx: "Só para seções que JÁ existem no corpo (rola até
+  // lá)").
   const attachmentsRef = useRef<HTMLDivElement>(null)
+  const checklistRef = useRef<HTMLDivElement>(null)
   // Responsivo (ELO-3182): grids de 2 colunas (Datas, Membros/Etiquetas)
   // viram 1 coluna em ~390px — mesmo breakpoint do resto do PM Office.
   const isMobile = useMediaQuery('(max-width: 640px)')
@@ -129,6 +145,7 @@ export function PedagogiaDocumentBody({
 
   const currentLabels = task.labels ?? []
   const attachments = task.attachments ?? []
+  const checklist = task.checklist ?? []
 
   async function handleToggleLabel(labelId: string, checked: boolean) {
     setLabelError(null)
@@ -212,6 +229,21 @@ export function PedagogiaDocumentBody({
             </svg>
           }
         />
+        {/* Checklist é seção fixa (mesmo padrão de Anexo) — só faz sentido
+            mostrar a pílula quando a tarefa JÁ tem alguma subtarefa OU quem
+            edita pode criar a primeira. "Adicionar" genérico continua fora,
+            igual à decisão já tomada pra Anexo. */}
+        {(checklist.length > 0 || (isEditable && onAddChecklistItem)) && (
+          <ActionPill
+            label={checklist.length > 0 ? `Checklist (${checklist.filter((i) => (i.status ?? (i.isChecked ? 'finalizado' : 'aguardando')) === 'finalizado').length}/${checklist.length})` : 'Checklist'}
+            onClick={() => checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+            }
+          />
+        )}
         {/* Prioridade e Repetir continuam existindo (decisão do Marcos: não
             remover) mas não aparecem soltos como campo de formulário no meio
             do documento — ficam atrás desta pílula "Mais opções". */}
@@ -435,6 +467,26 @@ export function PedagogiaDocumentBody({
           boxed
         />
       </div>
+
+      {/* Checklist — seção fixa abaixo de Descrição, mesmo padrão de Anexos
+          (sempre visível quando há conteúdo ou permissão de criar; a
+          pílula rola até aqui em vez de abrir/fechar). Estava faltando no
+          modo documento: já existia no formulário clássico
+          (`task.source === 'graph'`), que a Pedagogia nunca usa — dava pra
+          VER o resumo no card, mas não mexer de dentro do modal. */}
+      {(checklist.length > 0 || (isEditable && onAddChecklistItem)) && (
+        <div ref={checklistRef}>
+          <ChecklistSection
+            items={checklist}
+            isEditable={isEditable}
+            onToggleItem={onToggleChecklistItem}
+            onUpdateItemStatus={onUpdateChecklistItemStatus}
+            onAddItem={onAddChecklistItem}
+            onRenameItem={onRenameChecklistItem}
+            onDeleteItem={onDeleteChecklistItem}
+          />
+        </div>
+      )}
 
       {/* Anexos (ELO-3184 Fase 1) — seção fixa abaixo de Descrição, sempre
           visível (diferente de Datas/Membros, que só aparecem ao clicar na
