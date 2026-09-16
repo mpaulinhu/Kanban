@@ -632,6 +632,14 @@ export function TaskDetailModal({
     if (!task) return
     await updatePMTask(task.projectId, task.bucketId, task.id, patch)
     const updatedTask: PMTask = { ...task, ...patch }
+    // `observacoes` tem espelho em estado local (lido de volta por
+    // `InlineEditableText` via a prop `value` em PedagogiaDocumentBody) —
+    // sem sincronizar aqui, o campo volta a mostrar o texto ANTIGO assim que
+    // sai do modo de edição: o `useEffect` de `InlineEditableText` resincroniza
+    // `draft = value` a cada `editing` mudar para `false`, e `value` continuava
+    // apontando pro `observacoes` desatualizado (só era setado pelo `useEffect`
+    // ligado a `task?.id`, que não muda numa edição de campo já aberta).
+    if ('observacoes' in patch) setObservacoes(patch.observacoes ?? '')
     onSave?.(updatedTask)
   }
 
