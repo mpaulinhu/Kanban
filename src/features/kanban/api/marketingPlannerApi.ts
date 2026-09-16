@@ -418,6 +418,68 @@ export async function addChecklistItem(
   })
 }
 
+/**
+ * Aplica um template de checklist numa tarefa que JÁ EXISTE — ADICIONA os
+ * itens do template ao checklist atual, nunca substitui (se a tarefa já tinha
+ * subtarefas, elas continuam intactas).
+ *
+ * Um `mutate` só, não N chamadas de `addChecklistItem` em sequência:
+ * `addChecklistItem` usa `id: local_${Date.now()}` — chamadas rápidas em loop
+ * colidiriam no mesmo milissegundo. O índice `i` no id resolve a colisão.
+ */
+export async function applyTemplateToTaskChecklist(
+  projectId: string,
+  bucketId: string,
+  taskId: string,
+  template: MarketingTaskTemplate,
+  currentChecklist: ChecklistItem[],
+): Promise<void> {
+  const now = Date.now()
+  const newItems: ChecklistItem[] = template.checklist.map((title, i) => ({
+    id: `local_${now}_${i}`,
+    title,
+    isChecked: false,
+    status: 'aguardando',
+    orderHint: String(currentChecklist.length + i),
+  }))
+  const merged = [...currentChecklist, ...newItems]
+  mutate((draft) => {
+    const task = draft.tasks.find(
+      (t) => t.id === taskId && t.projectId === projectId && t.bucketId === bucketId,
+    )
+    if (!task) return
+    task.checklist = merged
+    task.checklistTotal = merged.length
+  })
+}
+
+// ── CRUD de templates ────────────────────────────────────────────────────────
+
+export async function createMarketingTemplate(
+  data: Omit<MarketingTaskTemplate, 'id'>,
+): Promise<void> {
+  mutate((draft) => {
+    draft.templates.push({ ...data, id: `tpl_${Date.now()}` })
+  })
+}
+
+export async function updateMarketingTemplate(
+  id: string,
+  data: Partial<Omit<MarketingTaskTemplate, 'id'>>,
+): Promise<void> {
+  mutate((draft) => {
+    const tpl = draft.templates.find((t) => t.id === id)
+    if (!tpl) return
+    Object.assign(tpl, data)
+  })
+}
+
+export async function deleteMarketingTemplate(id: string): Promise<void> {
+  mutate((draft) => {
+    draft.templates = draft.templates.filter((t) => t.id !== id)
+  })
+}
+
 export async function toggleChecklistItem(
   projectId: string,
   bucketId: string,

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ChecklistItem, PMOfficeLabel, PMTask, RecurrenceConfig } from '../types/pmOffice'
 import type { UserRecord } from '../api/usersApi'
 import type { PMTaskPatch } from '../api/pmOfficeApi'
-import { createPMOfficeLabel, setPMTaskLabel, updatePMOfficeLabel } from '../api/marketingPlannerApi'
+import { applyTemplateToTaskChecklist, createPMOfficeLabel, setPMTaskLabel, updatePMOfficeLabel } from '../api/marketingPlannerApi'
+import type { MarketingTaskTemplate } from '../types/pmOffice'
 import { buildUnnamedLabelDisplayName, type KnownColorKey } from '../utils/labelColors'
 import { UserAvatar } from '@/components/UserAvatar/UserAvatar'
 import { InlineEditableText } from './InlineEditableText'
@@ -86,6 +87,7 @@ export function PedagogiaDocumentBody({
   onAddChecklistItem,
   onRenameChecklistItem,
   onDeleteChecklistItem,
+  bucketName,
 }: {
   task: PMTask
   users: UserRecord[]
@@ -109,12 +111,14 @@ export function PedagogiaDocumentBody({
   scrollContainer: HTMLElement | null
   /** ELO-3184: Viewer (`!isEditable`) vê e abre anexos, mas não sobe nem exclui. */
   isEditable: boolean
-  /** Subtarefas (checklist) — mesmos callbacks já fiados na página do quadro para o modo formulário clássico; o modo documento não os tinha até aqui. */
+  /** Subtarefas (checklist) — ELO-3199. Mesmos callbacks já fiados na página do quadro para o modo formulário clássico; o modo documento não os tinha até aqui. */
   onToggleChecklistItem?: (itemId: string, checked: boolean) => Promise<void>
   onUpdateChecklistItemStatus?: (itemId: string, status: ChecklistStatus) => Promise<void>
   onAddChecklistItem?: (title: string) => Promise<void>
   onRenameChecklistItem?: (itemId: string, newTitle: string) => Promise<void>
   onDeleteChecklistItem?: (itemId: string) => Promise<void>
+  /** ELO-3201: nome da coluna atual da tarefa — usado pra filtrar quais templates de checklist aparecem em "Aplicar template". */
+  bucketName?: string
 }) {
   const [showDates, setShowDates] = useState(false)
   const [showMembers, setShowMembers] = useState(false)
@@ -131,9 +135,16 @@ export function PedagogiaDocumentBody({
   // Descrição) — a pílula não alterna visibilidade como Datas/Membros, só
   // rola até lá (mesmo padrão do comentário de `ActionPill` em
   // TaskDetailModal.tsx: "Só para seções que JÁ existem no corpo (rola até
-  // lá)").
+  // lá)"). Rolar sozinho não bastava (achado do Marcos: "deve aparecer para
+  // adicionar o checklist e o anexo quando clicar nesses botões, se não eles
+  // ficam apenas como visual") — quando a seção já está visível na tela
+  // (comum em tarefa sem nada ainda), rolar não produz efeito perceptível
+  // nenhum. Os contadores abaixo acionam a AÇÃO em si (focar o campo/abrir o
+  // seletor de arquivo), não só a rolagem.
   const attachmentsRef = useRef<HTMLDivElement>(null)
   const checklistRef = useRef<HTMLDivElement>(null)
+  const [openAttachmentPicker, setOpenAttachmentPicker] = useState(0)
+  const [focusChecklistInput, setFocusChecklistInput] = useState(0)
   // Responsivo (ELO-3182): grids de 2 colunas (Datas, Membros/Etiquetas)
   // viram 1 coluna em ~390px — mesmo breakpoint do resto do PM Office.
   const isMobile = useMediaQuery('(max-width: 640px)')
@@ -193,14 +204,12 @@ export function PedagogiaDocumentBody({
     // space-y-6 (24px) dá mais ar entre pílulas → Membros/Etiquetas →
     // Descrição → Anexos, sem mudar a ORDEM nem remover nenhuma seção.
     <div className="space-y-6">
-      {/* Pílulas de ação — Datas, Membros e Anexos abrem o editor
-          correspondente inline (mesma linha, sem popover separado).
-          Checklist fica de fora: não existe pra `source: 'trello'` (a seção
-          clássica só renderiza pra `source==='graph'`, e nenhuma tarefa da
-          Pedagogia tem checklist migrado) — uma pílula que abre uma seção
-          vazia seria "controle sem função". Anexo passou a existir na
-          ELO-3184 Fase 1 (upload/lista/exclusão real). "+ Adicionar"
-          genérico continua de fora. */}
+      {/* Pílulas de ação — Datas, Membros, Anexos e Checklist abrem o editor
+          correspondente inline (mesma linha, sem popover separado). Checklist
+          (ELO-3199) só aparece quando a tarefa já tem alguma subtarefa OU
+          quem edita pode criar a primeira — uma pílula que abre uma seção
+          vazia sem permissão de criar seria "controle sem função". "+
+          Adicionar" genérico continua de fora. */}
       <div className="flex flex-wrap gap-2">
         <ActionPill
           label="Datas"
@@ -222,21 +231,23 @@ export function PedagogiaDocumentBody({
         />
         <ActionPill
           label={attachments.length > 0 ? `Anexo (${attachments.length})` : 'Anexo'}
-          onClick={() => attachmentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          onClick={() => {
+            attachmentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            if (isEditable) setOpenAttachmentPicker((n) => n + 1)
+          }}
           icon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
             </svg>
           }
         />
-        {/* Checklist é seção fixa (mesmo padrão de Anexo) — só faz sentido
-            mostrar a pílula quando a tarefa JÁ tem alguma subtarefa OU quem
-            edita pode criar a primeira. "Adicionar" genérico continua fora,
-            igual à decisão já tomada pra Anexo. */}
         {(checklist.length > 0 || (isEditable && onAddChecklistItem)) && (
           <ActionPill
             label={checklist.length > 0 ? `Checklist (${checklist.filter((i) => (i.status ?? (i.isChecked ? 'finalizado' : 'aguardando')) === 'finalizado').length}/${checklist.length})` : 'Checklist'}
-            onClick={() => checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            onClick={() => {
+              checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              if (isEditable) setFocusChecklistInput((n) => n + 1)
+            }}
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
@@ -468,9 +479,9 @@ export function PedagogiaDocumentBody({
         />
       </div>
 
-      {/* Checklist — seção fixa abaixo de Descrição, mesmo padrão de Anexos
-          (sempre visível quando há conteúdo ou permissão de criar; a
-          pílula rola até aqui em vez de abrir/fechar). Estava faltando no
+      {/* Checklist (ELO-3199) — seção fixa abaixo de Descrição, mesmo padrão
+          de Anexos (sempre visível quando há conteúdo ou permissão de criar;
+          a pílula rola até aqui em vez de abrir/fechar). Estava faltando no
           modo documento: já existia no formulário clássico
           (`task.source === 'graph'`), que a Pedagogia nunca usa — dava pra
           VER o resumo no card, mas não mexer de dentro do modal. */}
@@ -484,6 +495,15 @@ export function PedagogiaDocumentBody({
             onAddItem={onAddChecklistItem}
             onRenameItem={onRenameChecklistItem}
             onDeleteItem={onDeleteChecklistItem}
+            focusInputSignal={focusChecklistInput}
+            area="pedagogia"
+            bucketName={bucketName}
+            onApplyTemplate={
+              bucketName
+                ? (tpl: MarketingTaskTemplate) =>
+                    applyTemplateToTaskChecklist(task.projectId, task.bucketId, task.id, tpl, checklist)
+                : undefined
+            }
           />
         </div>
       )}
@@ -497,6 +517,7 @@ export function PedagogiaDocumentBody({
           attachments={attachments}
           isEditable={isEditable}
           onSaveField={onSaveField}
+          openPickerSignal={openAttachmentPicker}
         />
       </div>
     </div>

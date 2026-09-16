@@ -1,7 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ChecklistItem } from '../types/pmOffice'
+import type { ChecklistItem, MarketingTaskTemplate } from '../types/pmOffice'
+import { subscribeAreaTemplates } from '../api/marketingPlannerApi'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+
+/** Mesmo union restrito de `subscribeAreaTemplates`/`MarketingTaskTemplate['area']` — templates de checklist só existem para estas 3 áreas, não as 7 de `PmArea`. */
+type TemplateArea = NonNullable<MarketingTaskTemplate['area']>
+
+// Mesma normalização de `NewMarketingTaskModal.tsx` (`normalizeBucketName`) —
+// trata variantes Unicode de hífen/espaço que apareceriam como "categoria
+// diferente" numa comparação ingênua de string.
+function normalizeBucketName(s: string): string {
+  return s
+    .normalize('NFC')
+    .replace(/[­‐‑‒–—―−﹘﹣－]/g, '-')
+    .replace(/[               　]/g, ' ')
+    .trim()
+}
 
 type ChecklistStatus = NonNullable<ChecklistItem['status']>
 
@@ -24,9 +39,9 @@ function resolveStatus(item: ChecklistItem): ChecklistStatus {
  * Subtarefas de uma tarefa (checklist) — extraído do bloco que já existia no
  * modo formulário clássico de `TaskDetailModal.tsx` (`task.source === 'graph'`),
  * que a Pedagogia nunca usa. Reaproveitado aqui, sem duplicar, para o modo
- * documento (`PedagogiaDocumentBody.tsx`) também poder criar/editar/mudar
- * status/excluir subtarefa — antes só dava pra VER o que já existia (o card
- * mostra o resumo), não mexer, de dentro do modal.
+ * documento (`PedagogiaDocumentBody.tsx`, ELO-3182) também poder criar/editar/
+ * mudar status/excluir subtarefa (ELO-3199) — antes só dava pra VER o resumo
+ * no card do quadro, não mexer de dentro do modal.
  */
 export function ChecklistSection({
   items,
@@ -36,6 +51,10 @@ export function ChecklistSection({
   onAddItem,
   onRenameItem,
   onDeleteItem,
+  focusInputSignal,
+  area,
+  bucketName,
+  onApplyTemplate,
 }: {
   items: ChecklistItem[]
   isEditable: boolean
@@ -44,6 +63,25 @@ export function ChecklistSection({
   onAddItem?: (title: string) => Promise<void>
   onRenameItem?: (itemId: string, newTitle: string) => Promise<void>
   onDeleteItem?: (itemId: string) => Promise<void>
+  /**
+   * Foca o campo "Novo item" quando este valor MUDA — contador incrementado
+   * a cada clique no botão "Checklist" do pai, não um boolean (dois cliques
+   * seguidos precisam focar duas vezes, mesmo sem o usuário ter digitado
+   * nada na primeira). `undefined`/sem mudança = não foca sozinho.
+   */
+  focusInputSignal?: number
+  /**
+   * "Aplicar template" (ELO-3201) — os três abaixo precisam estar presentes
+   * juntos pra ação aparecer. `area`/`bucketName` resolvem QUAIS templates
+   * mostrar (mesmo critério de `NewMarketingTaskModal.tsx`: `categorias[]`
+   * do template batendo com o nome do bucket ATUAL da tarefa — decisão
+   * confirmada com o Marcos de manter esse vínculo, não simplificar pra
+   * "todo template em qualquer lugar"). `onApplyTemplate` é quem GRAVA
+   * (ADICIONA ao checklist existente, nunca substitui).
+   */
+  area?: TemplateArea
+  bucketName?: string
+  onApplyTemplate?: (template: MarketingTaskTemplate) => Promise<void>
 }) {
   const [newTitle, setNewTitle] = useState('')
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
@@ -53,6 +91,23 @@ export function ChecklistSection({
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteItemError, setDeleteItemError] = useState<string | null>(null)
+  const newItemInputRef = useRef<HTMLInputElement>(null)
+
+  const [availableTemplates, setAvailableTemplates] = useState<MarketingTaskTemplate[]>([])
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null)
+  const [applyTemplateError, setApplyTemplateError] = useState<string | null>(null)
+  const templateBtnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!area || !bucketName || !onApplyTemplate) { setAvailableTemplates([]); return }
+    const unsub = subscribeAreaTemplates(area, (all) => {
+      setAvailableTemplates(
+        all.filter((t) => t.categorias.some((cat) => normalizeBucketName(cat) === normalizeBucketName(bucketName))),
+      )
+    })
+    return unsub
+  }, [area, bucketName, onApplyTemplate])
 
   useEffect(() => {
     if (!openDropdownId) return
@@ -64,6 +119,32 @@ export function ChecklistSection({
     document.addEventListener('mousedown', onOutside)
     return () => document.removeEventListener('mousedown', onOutside)
   }, [openDropdownId])
+
+  useEffect(() => {
+    if (!templatePickerOpen) return
+    function onOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (target.closest('[data-template-picker]')) return
+      setTemplatePickerOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [templatePickerOpen])
+
+  // Pílula "Checklist" do modo documento pede pra focar o campo direto, não
+  // só rolar até a seção — mesmo raciocínio do `openPickerSignal` em
+  // TaskAttachments.tsx (ver comentário lá, com o bug real que motivou essa
+  // guarda). Comparar contra o VALOR inicial (não "é a primeira execução do
+  // efeito") — StrictMode roda este efeito 2x na montagem com o mesmo
+  // `focusInputSignal`, e uma guarda de "primeira vez" falha na segunda
+  // chamada e foca o campo sozinho ao abrir a tarefa.
+  const initialFocusSignal = useRef(focusInputSignal)
+  useEffect(() => {
+    if (focusInputSignal === initialFocusSignal.current) return
+    if (!isEditable) return
+    newItemInputRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusInputSignal])
 
   const done = items.filter((i) => resolveStatus(i) === 'finalizado').length
 
@@ -149,10 +230,15 @@ export function ChecklistSection({
                         setEditingItemId(item.id)
                         setEditingTitle(item.title)
                       }}
-                      style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--eh-muted-2)', lineHeight: 1, fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
+                      style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--eh-muted-2)', lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}
                       aria-label="Renomear subtarefa"
                     >
-                      ✏️
+                      {/* Mesmo ícone de lápis já usado em LabelPickerPopover.tsx (editar
+                          etiqueta) — trocado do emoji ✏️ pra ficar consistente com o
+                          resto do app, em vez de dois estilos de "editar" convivendo. */}
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                      </svg>
                     </button>
                   )}
                   {isEditable && onDeleteItem && (
@@ -210,8 +296,69 @@ export function ChecklistSection({
           )
         })}
       </div>
+      {isEditable && onApplyTemplate && availableTemplates.length > 0 && (
+        <div style={{ position: 'relative', marginBottom: 8 }} data-template-picker="">
+          <button
+            ref={templateBtnRef}
+            type="button"
+            onClick={() => setTemplatePickerOpen((v) => !v)}
+            aria-haspopup="dialog"
+            aria-expanded={templatePickerOpen}
+            className="inline-flex items-center gap-1.5"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--eh-primary)' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            Aplicar template
+          </button>
+          {templatePickerOpen && (
+            <div
+              role="dialog"
+              aria-label="Escolher template de checklist"
+              className="absolute z-20 mt-1"
+              style={{ background: 'var(--eh-surface)', border: '1px solid var(--eh-border)', borderRadius: 8, boxShadow: 'var(--eh-shadow-menu)', minWidth: 220, maxWidth: 320, padding: 4 }}
+            >
+              {availableTemplates.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  disabled={applyingTemplateId !== null}
+                  onClick={async () => {
+                    setApplyingTemplateId(tpl.id)
+                    setApplyTemplateError(null)
+                    try {
+                      await onApplyTemplate(tpl)
+                      setTemplatePickerOpen(false)
+                    } catch (err) {
+                      console.error('[checklist] Falha ao aplicar template', err)
+                      setApplyTemplateError('Não foi possível aplicar o template. Tente novamente.')
+                    } finally {
+                      setApplyingTemplateId(null)
+                    }
+                  }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: 'none', background: 'transparent', cursor: applyingTemplateId ? 'default' : 'pointer', opacity: applyingTemplateId && applyingTemplateId !== tpl.id ? 0.5 : 1 }}
+                  onMouseEnter={(e) => { if (!applyingTemplateId) e.currentTarget.style.background = 'var(--eh-surface-2)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--eh-text-strong)' }}>
+                    {applyingTemplateId === tpl.id ? 'Aplicando…' : tpl.name}
+                  </span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: 'var(--eh-text-2)', marginTop: 1 }}>
+                    {tpl.checklist.length} item{tpl.checklist.length !== 1 ? 's' : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {applyTemplateError && (
+            <p role="alert" className="text-xs mt-1" style={{ color: 'var(--eh-danger)' }}>{applyTemplateError}</p>
+          )}
+        </div>
+      )}
       {isEditable && onAddItem && (
         <input
+          ref={newItemInputRef}
           type="text"
           placeholder="Novo item... (Enter para adicionar)"
           value={newTitle}

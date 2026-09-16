@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { InlineDateCellPopup } from './InlineDateCellPopup'
-import type { ChecklistItem, PMOfficeLabel, PMTask, RecurrenceConfig } from '../types/pmOffice'
+import type { ChecklistItem, MarketingTaskTemplate, PMOfficeLabel, PMTask, RecurrenceConfig } from '../types/pmOffice'
 import { RecurrenceControl } from './RecurrenceControl'
 import type { PMTaskPatch } from '../api/pmOfficeApi'
 import { applyLazyOverdueTransition, updatePMTask } from '../api/pmOfficeApi'
 import { tsFromDate, type Timestamp } from '../api/store'
+import { applyTemplateToTaskChecklist } from '../api/marketingPlannerApi'
 import { onlyInternalUsers } from '@/lib/internalDomains'
 import type { UserRecord } from '../api/usersApi'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -1076,6 +1077,7 @@ export function TaskDetailModal({
                     onAddChecklistItem={onAddChecklistItem}
                     onRenameChecklistItem={onRenameChecklistItem}
                     onDeleteChecklistItem={onDeleteChecklistItem}
+                    bucketName={bucketName}
                   />
                 </div>
                 {/* Coluna direita — Comentários (ELO-3183). ~1/3 no desktop;
@@ -1383,6 +1385,14 @@ export function TaskDetailModal({
                   onAddItem={onAddChecklistItem}
                   onRenameItem={onRenameChecklistItem}
                   onDeleteItem={onDeleteChecklistItem}
+                  area={area}
+                  bucketName={bucketName}
+                  onApplyTemplate={
+                    area && bucketName
+                      ? (tpl: MarketingTaskTemplate) =>
+                          applyTemplateToTaskChecklist(task.projectId, task.bucketId, task.id, tpl, task.checklist ?? [])
+                      : undefined
+                  }
                 />
               )}
             </>

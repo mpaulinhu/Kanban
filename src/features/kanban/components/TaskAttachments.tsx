@@ -176,12 +176,21 @@ export function TaskAttachments({
   attachments,
   isEditable,
   onSaveField,
+  openPickerSignal,
 }: {
   taskId: string
   attachments: PMTaskAttachment[]
   /** Viewer (`!isEditable`) vê e abre anexos, mas não sobe nem exclui. */
   isEditable: boolean
   onSaveField: (patch: PMTaskPatch) => Promise<void>
+  /**
+   * Abre o seletor de arquivo do sistema quando este valor MUDA (não quando
+   * é truthy — por isso é um contador incrementado a cada clique, não um
+   * boolean: dois cliques seguidos no botão "Anexo" do pai precisam abrir o
+   * seletor duas vezes, mesmo que o usuário cancele a primeira sem soltar
+   * nenhum arquivo). `undefined`/sem mudança = não abre nada.
+   */
+  openPickerSignal?: number
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
@@ -217,6 +226,31 @@ export function TaskAttachments({
   function handlePickFiles() {
     fileInputRef.current?.click()
   }
+
+  // Pílula "Anexo" do modo documento (PedagogiaDocumentBody) pede pra abrir
+  // o seletor de arquivo direto, não só rolar até a seção — antes o clique
+  // só levava até aqui e a pessoa precisava achar e clicar em "+ Anexar
+  // arquivo" de novo, o que lia como "o botão não faz nada". `useEffect` com
+  // guarda de primeiro render: sem ela, abriria o seletor sozinho assim que
+  // o modal monta (openPickerSignal chega com seu valor inicial, não só nas
+  // mudanças seguintes).
+  // Guarda pelo VALOR com que o sinal nasceu, não por "é a primeira vez que
+  // o efeito roda" — em dev, o StrictMode desmonta e remonta o componente de
+  // propósito na montagem inicial, rodando este efeito duas vezes com o
+  // MESMO valor de `openPickerSignal` (0 na primeira chamada real de
+  // useState). Uma guarda de "primeira execução" (`useRef(true)` zerado no
+  // próprio efeito) é consumida na 1ª chamada e falha silenciosamente na 2ª,
+  // abrindo o seletor de arquivo sozinho ao abrir a tarefa — bug real
+  // encontrado pelo Marcos. Comparar contra o valor inicial é imune a
+  // quantas vezes o efeito roda: só dispara quando o número realmente muda
+  // (ou seja, quando o botão "Anexo" é clicado de verdade).
+  const initialPickerSignal = useRef(openPickerSignal)
+  useEffect(() => {
+    if (openPickerSignal === initialPickerSignal.current) return
+    if (!isEditable) return
+    handlePickFiles()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPickerSignal])
 
   async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
