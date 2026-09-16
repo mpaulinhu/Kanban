@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { diffFields } from '../utils/diffFields'
 
 /**
  * Trilha de auditoria. No CoreHub cada ação vira um documento no Firestore
@@ -31,10 +32,47 @@ export function usePmAudit(area: string, projectId: string | null, projectName: 
       ) => log('checklistItem', action, { task, item }, { ...ctx, extra }),
       logProject: (action: AuditAction, project: { id: string; title?: string }, extra?: unknown) =>
         log('project', action, project, { ...ctx, extra }),
-      logTemplate: (action: AuditAction, template: { id: string; title?: string }, extra?: unknown) =>
+      logTemplate: (action: AuditAction, template: { id: string; title?: string; name?: string }, extra?: unknown) =>
         log('template', action, template, { ...ctx, extra }),
     }
   }, [area, projectId, projectName])
 }
 
 export type PmAudit = ReturnType<typeof usePmAudit>
+
+/**
+ * Registra o save de uma tarefa escolhendo a ação pelo que mudou — concluir e
+ * reabrir são ações distintas de uma edição comum, e um save sem nenhuma
+ * mudança real não gera entrada (senão todo clique em "Salvar" viraria ruído
+ * no log).
+ */
+export function logTaskSave(
+  audit: PmAudit,
+  previous: { status?: string; title?: string } | undefined,
+  updated: { id: string; status?: string; title?: string; bucketId?: string },
+  bucketName?: string,
+): void {
+  const wasDone = previous?.status === 'done'
+  const isDone = updated.status === 'done'
+  const action = isDone && !wasDone
+    ? 'pm_task.done'
+    : !isDone && wasDone
+      ? 'pm_task.undone'
+      : 'pm_task.update'
+
+  const changes = diffFields(
+    previous as Record<string, unknown> | undefined,
+    updated as Record<string, unknown>,
+  )
+  if (changes.length === 0 && action === 'pm_task.update') return
+
+  audit.logTask(
+    action,
+    { id: updated.id, title: updated.title },
+    {
+      ...(updated.bucketId ? { bucketId: updated.bucketId } : {}),
+      ...(bucketName ? { bucketName } : {}),
+      ...(changes.length > 0 ? { changes } : {}),
+    },
+  )
+}

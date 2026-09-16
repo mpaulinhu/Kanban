@@ -1,6 +1,6 @@
 # Kanban
 
-Quadro Kanban estilo Trello, extraído da tela de Pedagogia do CoreHub para
+Gestão de tarefas estilo Trello, extraída da área de Pedagogia do CoreHub para
 rodar como aplicação independente.
 
 ## Rodar
@@ -12,12 +12,21 @@ npm run dev
 
 Abre em `http://localhost:5200`.
 
+## Telas
+
+| Rota | O que é |
+|---|---|
+| `/quadro` | Quadro Kanban — arrastar cards e colunas, modal de detalhe |
+| `/grade` | Tabela com filtros (status, prioridade, categoria, responsável, período) e ordenação |
+| `/calendario` | Calendário em Mês/Semana/Dia, arrastando tarefa para mudar a data |
+| `/templates` | Modelos de checklist reutilizáveis |
+
 ## Estado atual
 
 A interface está completa e funcional — arrastar cards e colunas, modal de
 detalhe, etiquetas nomeadas com escolha de cor, comentários, anexos,
-checklist, responsáveis, filtro por etiqueta, busca, arquivamento e modo
-ampliado.
+checklist (com modelos aplicáveis a uma tarefa existente), responsáveis,
+filtro por etiqueta, busca, arquivamento e modo ampliado.
 
 **Os dados são de demonstração**, guardados na memória do navegador e
 espelhados em `localStorage` (sobrevivem a um F5, não saem da máquina). Não
@@ -63,9 +72,10 @@ medição — não substitua esses valores por aproximações.
 src/
   components/         UserAvatar, UserProfilePopover, Toast, ConfirmDialog
   features/kanban/
-    KanbanBoardPage.tsx   a tela
+    KanbanBoardPage.tsx   o quadro
+    pages/                grade, calendário, templates
     api/                  dados (hoje em memória)
-    components/           card, modal, etiquetas, comentários, anexos
+    components/           card, modal, etiquetas, comentários, anexos, checklist
     types/ utils/ hooks/
   layouts/            casca do app e modo ampliado
   providers/          usuário

@@ -49,15 +49,15 @@ const PLUS_ICON =
 const COLUMN_ACCENT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4']
 
 /**
- * Base de rota e título default por área (ELO-2936, com Pedagogia na
- * ELO-3182). `area` default `'marketing'` preserva o comportamento desta
- * tela para quem já a usa — Administrativo/Pedagogia passam
- * `area="administrativo"`/`area="pedagogia"` via router.
+ * Base de rota por área. No CoreHub cada área tem seu próprio prefixo
+ * (`/pm-office-marketing` etc.); aqui só existe a Pedagogia, então a base é
+ * a raiz — as telas ficam em `/quadro`, `/grade`, `/calendario`,
+ * `/templates` (ver `main.tsx`).
  */
 const NAV_BASE: Record<'marketing' | 'administrativo' | 'pedagogia', string> = {
   marketing: '/pm-office-marketing',
   administrativo: '/pm-office-administrativo',
-  pedagogia: '/pm-office-pedagogia',
+  pedagogia: '',
 }
 const DEFAULT_TITLE: Record<'marketing' | 'administrativo' | 'pedagogia', string> = {
   marketing: 'Marketing Diário',
