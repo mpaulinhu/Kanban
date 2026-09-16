@@ -40,19 +40,18 @@ const PRIORITY_OPTIONS = [
 ]
 
 /**
- * Corpo do modal em modo "documento" (ELO-3182) — exclusivo da área
+ * Corpo do modal em modo "documento" — exclusivo da área
  * Pedagogia, só quando `isEditable`. Substitui o formulário clássico
  * (rótulos "Título"/"Status"/"Prioridade", barra Cancelar/Salvar) por um
  * layout sem cara de formulário: texto que vira campo ao clicar, salva no
- * blur/Enter, sem botão Salvar — como o Trello real.
+ * blur/Enter, sem botão Salvar.
  *
- * Ordem (medida na captura real, confirmada pelo Marcos): chip → título →
- * PÍLULAS DE AÇÃO → Membros/Etiquetas → Descrição. O título e o chip ficam
- * no cabeçalho do modal (`TaskDetailModal.tsx`), fora deste componente —
- * aqui começa a partir das pílulas.
+ * Ordem: chip → título → PÍLULAS DE AÇÃO → Membros/Etiquetas → Descrição. O
+ * título e o chip ficam no cabeçalho do modal (`TaskDetailModal.tsx`), fora
+ * deste componente — aqui começa a partir das pílulas.
  *
- * Risco de "salvar no blur sem botão Salvar" (levantado explicitamente pelo
- * Marcos) — três garantias, todas em `InlineEditableText`/`saveField`:
+ * Salvar no blur sem botão "Salvar" é arriscado; três garantias cobrem isso,
+ * todas em `InlineEditableText`/`saveField`:
  * (a) só grava se o valor mudou de fato (comparação trim() a trim());
  * (b) erro de gravação aparece pro usuário (banner vermelho inline, não só
  *     `console.error`) e o campo volta pra edição com o texto não perdido;
@@ -109,15 +108,15 @@ export function PedagogiaDocumentBody({
   observacoes: string
   onSaveField: (patch: PMTaskPatch) => Promise<void>
   scrollContainer: HTMLElement | null
-  /** ELO-3184: Viewer (`!isEditable`) vê e abre anexos, mas não sobe nem exclui. */
+  /** Viewer (`!isEditable`) vê e abre anexos, mas não sobe nem exclui. */
   isEditable: boolean
-  /** Subtarefas (checklist) — ELO-3199. Mesmos callbacks já fiados na página do quadro para o modo formulário clássico; o modo documento não os tinha até aqui. */
+  /** Subtarefas (checklist). Mesmos callbacks já fiados na página do quadro para o modo formulário clássico; o modo documento não os tinha até aqui. */
   onToggleChecklistItem?: (itemId: string, checked: boolean) => Promise<void>
   onUpdateChecklistItemStatus?: (itemId: string, status: ChecklistStatus) => Promise<void>
   onAddChecklistItem?: (title: string) => Promise<void>
   onRenameChecklistItem?: (itemId: string, newTitle: string) => Promise<void>
   onDeleteChecklistItem?: (itemId: string) => Promise<void>
-  /** ELO-3201: nome da coluna atual da tarefa — usado pra filtrar quais templates de checklist aparecem em "Aplicar template". */
+  /** Nome da coluna atual da tarefa — usado pra filtrar quais templates de checklist aparecem em "Aplicar template". */
   bucketName?: string
 }) {
   const [showDates, setShowDates] = useState(false)
@@ -126,7 +125,7 @@ export function PedagogiaDocumentBody({
   const [showExtras, setShowExtras] = useState(false)
   const [labelError, setLabelError] = useState<string | null>(null)
   const labelBtnRef = useRef<HTMLButtonElement>(null)
-  // Popover de perfil ao clicar num avatar de membro (ELO-3182/ELO-3183) —
+  // Popover de perfil ao clicar num avatar de membro:
   // guarda o índice do avatar clicado (mesmo array `assignees`/`assigneesNames`,
   // não precisa duplicar dado) e sua própria ref de âncora para posicionar.
   const [profilePopoverIndex, setProfilePopoverIndex] = useState<number | null>(null)
@@ -135,9 +134,7 @@ export function PedagogiaDocumentBody({
   // Descrição) — a pílula não alterna visibilidade como Datas/Membros, só
   // rola até lá (mesmo padrão do comentário de `ActionPill` em
   // TaskDetailModal.tsx: "Só para seções que JÁ existem no corpo (rola até
-  // lá)"). Rolar sozinho não bastava (achado do Marcos: "deve aparecer para
-  // adicionar o checklist e o anexo quando clicar nesses botões, se não eles
-  // ficam apenas como visual") — quando a seção já está visível na tela
+  // lá)"). Rolar sozinho não basta: quando a seção já está visível na tela
   // (comum em tarefa sem nada ainda), rolar não produz efeito perceptível
   // nenhum. Os contadores abaixo acionam a AÇÃO em si (focar o campo/abrir o
   // seletor de arquivo), não só a rolagem.
@@ -145,7 +142,7 @@ export function PedagogiaDocumentBody({
   const checklistRef = useRef<HTMLDivElement>(null)
   const [openAttachmentPicker, setOpenAttachmentPicker] = useState(0)
   const [focusChecklistInput, setFocusChecklistInput] = useState(0)
-  // Responsivo (ELO-3182): grids de 2 colunas (Datas, Membros/Etiquetas)
+  // Responsivo: grids de 2 colunas (Datas, Membros/Etiquetas)
   // viram 1 coluna em ~390px — mesmo breakpoint do resto do PM Office.
   const isMobile = useMediaQuery('(max-width: 640px)')
 
@@ -182,7 +179,7 @@ export function PedagogiaDocumentBody({
     await createPMOfficeLabel(task.projectId, {
       name: null,
       displayName,
-      trelloColor: color,
+      colorKey: color,
       order: maxOrder + 1,
     })
   }
@@ -194,19 +191,17 @@ export function PedagogiaDocumentBody({
     )
     await updatePMOfficeLabel(task.projectId, labelId, {
       displayName,
-      trelloColor: color,
+      colorKey: color,
     })
   }
 
   return (
-    // ELO-3182 (refino, pedido do Marcos: "há mais respiro vertical entre as
-    // seções [no Trello]... hoje está apertado") — era space-y-4 (16px);
-    // space-y-6 (24px) dá mais ar entre pílulas → Membros/Etiquetas →
-    // Descrição → Anexos, sem mudar a ORDEM nem remover nenhuma seção.
+    // space-y-6 (24px), não space-y-4: dá respiro vertical entre pílulas →
+    // Membros/Etiquetas → Descrição → Anexos, que ficavam apertados demais.
     <div className="space-y-6">
       {/* Pílulas de ação — Datas, Membros, Anexos e Checklist abrem o editor
           correspondente inline (mesma linha, sem popover separado). Checklist
-          (ELO-3199) só aparece quando a tarefa já tem alguma subtarefa OU
+          só aparece quando a tarefa já tem alguma subtarefa OU
           quem edita pode criar a primeira — uma pílula que abre uma seção
           vazia sem permissão de criar seria "controle sem função". "+
           Adicionar" genérico continua de fora. */}
@@ -255,9 +250,9 @@ export function PedagogiaDocumentBody({
             }
           />
         )}
-        {/* Prioridade e Repetir continuam existindo (decisão do Marcos: não
-            remover) mas não aparecem soltos como campo de formulário no meio
-            do documento — ficam atrás desta pílula "Mais opções". */}
+        {/* Prioridade e Repetir continuam existindo, mas não aparecem soltos
+            como campo de formulário no meio do documento — ficam atrás desta
+            pílula "Mais opções". */}
         <ActionPill
           label="Mais opções"
           onClick={() => setShowExtras((v) => !v)}
@@ -329,10 +324,9 @@ export function PedagogiaDocumentBody({
         </div>
       )}
 
-      {/* Membros/Etiquetas lado a lado — DEPOIS das pílulas de ação (ordem
-          corrigida: a captura real do Trello mostra chip → título → pílulas
-          → Membros/Etiquetas → Descrição; a versão anterior tinha essa
-          seção ANTES das pílulas). */}
+      {/* Membros/Etiquetas lado a lado — DEPOIS das pílulas de ação. A ordem
+          do modo documento é chip → título → pílulas → Membros/Etiquetas →
+          Descrição. */}
       <div className={isMobile ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-2 gap-4'}>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--eh-pm-modal-text)' }}>
@@ -395,10 +389,9 @@ export function PedagogiaDocumentBody({
             Etiquetas
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* A própria etiqueta abre o seletor (pedido do Marcos: "ao clicar
-                em cima dela, já abria, sem precisar clicar no +"). É também o
-                comportamento do Trello. O `+` continua existindo para quando
-                não há nenhuma etiqueta ainda — aí não haveria no que clicar. */}
+            {/* A própria etiqueta abre o seletor — clicar em cima dela basta,
+                sem precisar mirar no `+`. O `+` continua existindo para quando
+                não há nenhuma etiqueta ainda: aí não haveria no que clicar. */}
             {currentLabels.length > 0 && (
               <button
                 type="button"
@@ -448,10 +441,9 @@ export function PedagogiaDocumentBody({
       {/* Descrição — modo documento: texto puro (ou placeholder) fora da
           edição, clicar abre textarea inline, blur/Ctrl+Enter salva.
           `maxWidth: 760` pelo mesmo motivo do título em TaskDetailModal.tsx:
-          o modal ficou largo (1075px) a pedido do Marcos, mas um parágrafo
-          esticando quase a largura toda vira difícil de ler — limitando só
-          este bloco de texto, não o corpo inteiro (pílulas/Membros/
-          Etiquetas continuam usando a largura completa). */}
+          o modal é largo (1075px), e um parágrafo esticando quase a largura
+          toda fica difícil de ler. O limite vale só para este bloco de texto —
+          pílulas/Membros/Etiquetas continuam usando a largura completa. */}
       <div style={{ maxWidth: 760 }}>
         <p className="flex items-center gap-1.5 text-xs font-semibold mb-1" style={{ color: 'var(--eh-pm-modal-text)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -459,14 +451,10 @@ export function PedagogiaDocumentBody({
           </svg>
           Descrição
         </p>
-        {/* ELO-3182 (refino, pedido do Marcos: "Descrição tem um bloquinho...
-            o nosso é discreto demais, quase invisível até clicar"). `boxed`
-            dá fundo+borda já em repouso (ver InlineEditableText.tsx).
-            `minHeight` 72 (era 60) — medido em trello-3-modal.png: a caixa
-            de Descrição do Trello mede ~90px de altura TOTAL na captura
-            (bordas incluídas); 72px de MIOLO + padding do `boxed` (10px
-            topo/base) fecha bem próximo desse total, dentro da faixa
-            "60-80px" pedida. */}
+        {/* `boxed` dá fundo+borda já em repouso (ver InlineEditableText.tsx),
+            para o campo não ficar quase invisível até alguém clicar nele.
+            `minHeight` 72: somado ao padding do `boxed` (10px topo/base), a
+            caixa fecha em ~90px de altura total. */}
         <InlineEditableText
           value={observacoes}
           onSave={(next) => onSaveField({ observacoes: next || null })}
@@ -479,7 +467,7 @@ export function PedagogiaDocumentBody({
         />
       </div>
 
-      {/* Checklist (ELO-3199) — seção fixa abaixo de Descrição, mesmo padrão
+      {/* Checklist — seção fixa abaixo de Descrição, mesmo padrão
           de Anexos (sempre visível quando há conteúdo ou permissão de criar;
           a pílula rola até aqui em vez de abrir/fechar). Estava faltando no
           modo documento: já existia no formulário clássico
@@ -496,7 +484,6 @@ export function PedagogiaDocumentBody({
             onRenameItem={onRenameChecklistItem}
             onDeleteItem={onDeleteChecklistItem}
             focusInputSignal={focusChecklistInput}
-            area="pedagogia"
             bucketName={bucketName}
             onApplyTemplate={
               bucketName
@@ -508,7 +495,7 @@ export function PedagogiaDocumentBody({
         </div>
       )}
 
-      {/* Anexos (ELO-3184 Fase 1) — seção fixa abaixo de Descrição, sempre
+      {/* Anexos — seção fixa abaixo de Descrição, sempre
           visível (diferente de Datas/Membros, que só aparecem ao clicar na
           pílula). A pílula "Anexo" rola até aqui em vez de abrir/fechar. */}
       <div ref={attachmentsRef}>

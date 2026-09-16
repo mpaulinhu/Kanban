@@ -10,7 +10,7 @@ import { AssigneeAvatars } from './AssigneeAvatars'
 import { LabelChips } from './LabelChips'
 import { UserProfilePopover } from '@/components/UserProfilePopover'
 
-/** Resolve a foto do usuário por nome exato (case-insensitive), só quando único. Mesmo critério de `PlannerBucketTree.findPhotoByName`. */
+/** Resolve a foto do usuário por nome exato (case-insensitive), só quando único — ambíguo não resolve. */
 function findPhotoByName(name: string, users: UserRecord[]): string | undefined {
   const target = name.trim().toLowerCase()
   const matches = users.filter((u) => u.name.trim().toLowerCase() === target)
@@ -25,26 +25,26 @@ function findEmailByName(name: string, users: UserRecord[]): string | undefined 
 }
 
 /**
- * Só UM popover de perfil pode ficar aberto no quadro inteiro (ELO-3183) —
+ * Só UM popover de perfil pode ficar aberto no quadro inteiro —
  * o estado vive dentro de cada card (que é memoizado; levantá-lo para a
  * página passaria um callback novo a cada render e anularia o `memo`), então
  * a exclusão mútua acontece por este evento: ao abrir, um card anuncia seu
  * id e todos os outros fecham o seu.
  */
-const PROFILE_POPOVER_EVENT = 'corehub:pm-profile-popover-open'
+const PROFILE_POPOVER_EVENT = 'kanban:profile-popover-open'
 
 
 
 /**
  * Pulso visual de ~2s aplicado uma única vez à tarefa alvo de um link "Minhas
- * Tarefas" (Dashboard). Mesma definição usada em `PlannerBucketTree.tsx` —
- * não duplicar com valores divergentes (ELO-2177).
+ * Tarefas" (Dashboard). Manter em sincronia com o fade-out abaixo — valores
+ * divergentes produzem um corte visível no fim do pulso.
  */
 const HIGHLIGHT_ANIMATION = 'eh-task-highlight-pulse 2s ease-in-out 1'
 
 /**
- * Fallback pra suavizar o FIM do destaque (ELO-2177 v3). Ver comentário
- * equivalente em `PlannerBucketTree.tsx` — mesmo raciocínio, mesmo valor.
+ * Fallback pra suavizar o FIM do destaque: sem a transição, o
+ * `background-color` corta de uma vez quando a animação termina.
  */
 const HIGHLIGHT_FADE_OUT_TRANSITION = 'background-color 350ms ease-out'
 
@@ -125,34 +125,34 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   onExpand: () => void
   accentColor?: string
   sortableId: string
-  /** Bucket ao qual esta tarefa pertence — passado ao useSortable.data para cross-column DnD. ELO-2153. */
+  /** Bucket ao qual esta tarefa pertence — passado ao useSortable.data para cross-column DnD. */
   bucketId: string
   onStartDateAutoFilled?: (task: PMTask, date: Date) => void
-  /** ELO-1954: Viewer não pode reordenar (drag) nem mudar status de checklist inline. */
+  /** Viewer não pode reordenar (drag) nem mudar status de checklist inline. */
   readOnly?: boolean
-  /** Colunas de destino disponíveis para mover a tarefa (exclui a coluna atual). ELO-2153. */
+  /** Colunas de destino disponíveis para mover a tarefa (exclui a coluna atual). */
   buckets?: { id: string; name: string }[]
-  /** Todas as colunas disponíveis para clonar (inclui a coluna atual). ELO-2155. */
+  /** Todas as colunas disponíveis para clonar (inclui a coluna atual). */
   allBuckets?: { id: string; name: string }[]
-  /** Chamado quando o usuário seleciona uma coluna de destino no menu "Mover para". ELO-2153. */
+  /** Chamado quando o usuário seleciona uma coluna de destino no menu "Mover para". */
   onMove?: (targetBucketId: string) => void
-  /** Chamado quando o usuário confirma a clonagem para uma coluna de destino. ELO-2155. */
+  /** Chamado quando o usuário confirma a clonagem para uma coluna de destino. */
   onClone?: (targetBucketId: string) => void
-  /** Chamado quando o usuário solicita exclusão da tarefa. ELO-2155. */
+  /** Chamado quando o usuário solicita exclusão da tarefa. */
   onDelete?: () => void
-  /** Chamado quando o usuário alterna arquivado/desarquivado (ELO-3182). Ausente = item não aparece no menu (Marketing/Administrativo, sem UI de arquivamento por card ainda pedida). */
+  /** Chamado quando o usuário alterna arquivado/desarquivado. Ausente = item não aparece no menu (Marketing/Administrativo, sem UI de arquivamento por card ainda pedida). */
   onToggleArchive?: () => void
-  /** ELO-2177: tarefa alvo de um link "Minhas Tarefas" — recebe pulso visual temporário. */
+  /** Tarefa alvo de um link "Minhas Tarefas" — recebe pulso visual temporário. */
   highlighted?: boolean
-  /** Usuários do workspace, para resolver foto de perfil dos responsáveis (ELO-2661). Sem essa lista, cai no fallback de iniciais. */
+  /** Usuários do workspace, para resolver foto de perfil dos responsáveis. Sem essa lista, cai no fallback de iniciais. */
   users?: UserRecord[]
-  /** Área dona da tarefa (ELO-2936, com Pedagogia na ELO-3182) — usada só para o audit log do clique de status no card. Default 'marketing' preserva o comportamento existente. */
+  /** Área dona da tarefa — usada só para o audit log do clique de status no card. Default 'marketing' preserva o comportamento existente. */
   area?: 'marketing' | 'administrativo' | 'pedagogia'
-  /** Dicionário de etiquetas do projeto (ELO-3182) — `undefined`/vazio em Marketing/Administrativo hoje, então `LabelChips` não renderiza nada lá. */
+  /** Dicionário de etiquetas do projeto — `undefined`/vazio em Marketing/Administrativo hoje, então `LabelChips` não renderiza nada lá. */
   labelsById?: Map<string, PMOfficeLabel>
   /**
    * `true` quando este card é a cópia flutuante renderizada pelo `DragOverlay`
-   * (ELO-3182, Pedagogia). O overlay já aplica rotação/sombra/opacidade no
+   * O overlay já aplica rotação/sombra/opacidade no
    * wrapper — aqui só evitamos repetir esses efeitos, que dobrariam a
    * inclinação e escureceriam a sombra.
    */
@@ -161,7 +161,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   const resolvedLabelsById = labelsById ?? new Map<string, PMOfficeLabel>()
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
-  // Menu de 3 pontos (⋯) — ELO-2153/ELO-2155
+  // Menu de 3 pontos (⋯)
   const [cardMenuOpen, setCardMenuOpen] = useState(false)
   const [cardMenuMode, setCardMenuMode] = useState<null | 'move' | 'clone'>(null)
   const cardMenuBtnRef = useRef<HTMLButtonElement>(null)
@@ -169,7 +169,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   const [cardMenuPos, setCardMenuPos] = useState({ top: 0, left: 0 })
   // Estado otimista local do checklist para refletir mudanças imediatamente
   const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>(task.checklist ?? [])
-  // Popover de perfil ao clicar num avatar do card (ELO-3183) — guarda o
+  // Popover de perfil ao clicar num avatar do card — guarda o
   // índice em `assigneesNames` e o elemento clicado, que serve de âncora.
   const [profilePopover, setProfilePopover] = useState<{ index: number; anchor: HTMLElement } | null>(null)
 
@@ -194,7 +194,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
     disabled: overlay,
   })
 
-  // Sincroniza checklist local quando o Firestore atualiza a tarefa
+  // Sincroniza checklist local quando os dados da tarefa mudam
   useEffect(() => {
     setLocalChecklist(task.checklist ?? [])
   }, [task.checklist])
@@ -211,7 +211,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
     return () => document.removeEventListener('mousedown', onOutside)
   }, [openDropdownId])
 
-  // Fecha menu ⋯ ao clicar fora (ELO-2153/ELO-2155)
+  // Fecha menu ⋯ ao clicar fora
   useEffect(() => {
     if (!cardMenuOpen) return
     function onOutside(e: MouseEvent) {
@@ -224,7 +224,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
     return () => document.removeEventListener('mousedown', onOutside)
   }, [cardMenuOpen])
 
-  // Posiciona o dropdown do menu ⋯ via portal (ELO-2153/ELO-2155)
+  // Posiciona o dropdown do menu ⋯ via portal
   useLayoutEffect(() => {
     if (!cardMenuOpen || !cardMenuPopRef.current || !cardMenuBtnRef.current) return
     const popRect = cardMenuPopRef.current.getBoundingClientRect()
@@ -248,8 +248,8 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   const isOverdue = dueDate !== null && dueDate < today && task.status !== 'done'
   const names = task.assigneesNames ?? []
   const hasChecklist = (task.checklistTotal ?? 0) > 0
-  // Refinamento visual estilo Trello (ELO-3182), exclusivo da área Pedagogia.
-  // Marketing/Administrativo continuam com o card atual, sem mudança de pixel.
+  // Card em estilo compacto, exclusivo da área Pedagogia. As demais áreas
+  // continuam com o card padrão.
   const isPedagogia = area === 'pedagogia'
 
   // Calcula contadores a partir do estado local otimista
@@ -271,7 +271,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
       itemId,
       status,
     ).catch(() => ({ autoFilledStartDate: false, filledDate: undefined }))
-    // ELO-2044: mudar status pelo card (sem abrir o modal) tambem e acao humana.
+    // Mudar status pelo card (sem abrir o modal) tambem e acao humana.
     logPmAction(
       'pm_checklist.item_status',
       {
@@ -329,27 +329,20 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
     background: 'var(--eh-surface)',
     border: isPedagogia ? 'none' : '1px solid var(--eh-border)',
     borderRadius: isPedagogia ? 8 : 10,
-    // Trello real: `.card { padding: 0 }`, o espaçamento visual vem do
-    // padding do CONTEÚDO interno (não medido pelo computed style que o
-    // orquestrador me passou — só a seletor `.card` foi capturado, não os
-    // filhos). Mantido aqui no wrapper (não dividido em outer padding:0 +
-    // inner wrapper) de propósito: o resultado em PIXELS na tela é idêntico
-    // nos dois approaches (mesma distância borda↔conteúdo), e dividir exigiria
-    // reestruturar todo o JSX interno (label bar, checklist, footer, menu ⋯)
-    // deste componente — risco real de regressão num componente com portais/
-    // drag-and-drop, por um ganho puramente arquitetural sem diferença visual.
-    // Pedagogia: o Trello dá mais respiro interno que o card do CoreHub —
-    // medido na captura, ~12px laterais e ~10px verticais. O '8px 10px'
-    // anterior foi o "espaço mal otimizado" que o Marcos apontou.
+    // O padding fica no wrapper, e não dividido em "outer padding:0 + inner
+    // wrapper": o resultado em PIXELS é idêntico nos dois arranjos, e dividir
+    // exigiria reestruturar todo o JSX interno (label bar, checklist, footer,
+    // menu ⋯) — risco real de regressão num componente com portais e
+    // drag-and-drop, por um ganho puramente arquitetural.
+    // Pedagogia: card com mais respiro interno — ~12px laterais e ~10px
+    // verticais. O '8px 10px' anterior deixava o conteúdo apertado demais.
     padding: isPedagogia ? '10px 12px' : '10px 12px 9px',
     marginBottom: isPedagogia ? 8 : 8,
-    // ELO-3182 (refinamento visual Pedagogia): sombra dupla medida por
-    // computed style de uma captura autenticada do card real do Trello
-    // (rgba(30,31,33,.25) 0 1px 1px 0, rgba(30,31,33,.31) 0 0 1px 0) — em
-    // vez do borderLeft colorido, já que a cor da coluna é indicada pelo
+    // Sombra dupla (rgba(30,31,33,.25) 0 1px 1px 0, rgba(30,31,33,.31) 0 0
+    // 1px 0) em vez do borderLeft colorido, já que a cor da coluna é indicada pelo
     // cabeçalho, então o card fica mais limpo/compacto sem a faixa lateral.
     // Sombra: no overlay quem aplica é o wrapper do DragOverlay (senão
-    // dobraria). Em repouso, a sombra dupla medida do card real do Trello.
+    // dobraria). Em repouso, a sombra dupla definida acima.
     boxShadow: overlay
       ? 'none'
       : isPedagogia
@@ -361,42 +354,37 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
     // aqui de novo deslocaria o card duas vezes.
     transform: overlay ? undefined : CSS.Transform.toString(transform),
     ...(isDragging ? { zIndex: 999 } : {}),
-    // Combina a transition de drag do dnd-kit com o fade-out do destaque
-    // (ELO-2177 v3) — sem isso, o `background-color` teria transição
-    // implícita "none" e o corte no fim do highlight ficaria abrupto.
+    // Combina a transition de drag do dnd-kit com o fade-out do destaque —
+    // sem isso, o `background-color` teria transição implícita "none" e o
+    // corte no fim do highlight ficaria abrupto.
     transition: transition ? `${transition}, ${HIGHLIGHT_FADE_OUT_TRANSITION}` : HIGHLIGHT_FADE_OUT_TRANSITION,
-    // ELO-3182 (correção do gate ux-ui-reviewer): opacidade sozinha NÃO
-    // indica "arquivada" de forma perceptível pra baixa visão — some com o
-    // chip "Arquivada" abaixo, que carrega a informação em texto.
-    // Refinamento visual Pedagogia: tarefa concluída (`status: 'done'`) NÃO
-    // esmaece aqui — na Pedagogia "concluída" é uma visita realizada, o
-    // registro de trabalho principal da tela, não uma tarefa encerrada a
-    // apagar. Continua esmaecendo só quando de fato arquivada. Marketing/
-    // Administrativo não usam este ramo (isPedagogia=false), sem mudança.
-    // Pedagogia: com o DragOverlay, quem se vê "na mão" é a cópia flutuante —
-    // este elemento é o lugar de ORIGEM. No Trello ele vira um vazio discreto
-    // que marca onde o card cairá. As outras áreas (sem overlay) mantêm o
-    // comportamento anterior.
+    // Opacidade sozinha NÃO indica "arquivada" de forma perceptível pra baixa
+    // visão — ela acompanha o chip "Arquivada" abaixo, que carrega a mesma
+    // informação em texto.
+    // Na Pedagogia, tarefa concluída (`status: 'done'`) NÃO esmaece: ali
+    // "concluída" é o registro de trabalho principal da tela, não algo a
+    // apagar. Só esmaece quando de fato arquivada.
+    // Com o DragOverlay, quem se vê "na mão" é a cópia flutuante — este
+    // elemento é o lugar de ORIGEM, e vira um vazio discreto marcando onde o
+    // card cairá. As áreas sem overlay mantêm o comportamento anterior.
     opacity: isDragging ? (isPedagogia ? 0.35 : 0.4) : task.archived ? 0.6 : 1,
     ...(!isPedagogia && accentColor ? { borderLeft: `3px solid ${accentColor}59` } : {}),
-    // ELO-3182: `content-visibility: auto` + `containIntrinsicSize` foram
-    // REMOVIDOS daqui. Tinham sido adicionados como ganho barato de
-    // performance ao soltar os 454 cards de FINALIZADOS no DOM, COM o risco
-    // já documentado na época: o dnd-kit mede `getBoundingClientRect()` dos
+    // NÃO reintroduzir `content-visibility: auto` + `containIntrinsicSize`
+    // aqui. Parecem um ganho barato de performance numa coluna com centenas de
+    // cards, mas quebram o drag: o dnd-kit mede `getBoundingClientRect()` dos
     // itens sortable, e um elemento com `content-visibility: auto` fora da
     // viewport reporta altura ZERO até intersectá-la — o que corrompe o
-    // cálculo de posição do `closestCenter`.
+    // cálculo de posição do `closestCenter`. Na prática isso produziu arraste
+    // cheio de saltos, e foi revertido.
     //
-    // O risco se confirmou na prática: o Marcos relatou "muitos bugs e quase
-    // nada de suavização" ao arrastar. Correção > micro-otimização — se a
-    // performance da coluna longa voltar a incomodar, o caminho certo é
+    // Se a performance da coluna longa voltar a incomodar, o caminho é
     // virtualização de verdade (react-window/virtua), não um hack de CSS que
     // mente sobre a altura dos elementos para a biblioteca de drag.
     ...(highlighted
       ? {
           animation: HIGHLIGHT_ANIMATION,
-          // ELO-2177 v4: o card (diferente do SubtaskRow) tem `background`
-          // próprio (`var(--eh-surface)`, não transparente) — o keyframe
+          // O card (diferente do SubtaskRow) tem `background` próprio
+          // (`var(--eh-surface)`, não transparente) — o keyframe
           // precisa terminar nesse mesmo valor pra não saltar quando a
           // animação para (ver comentário do @keyframes em globals.css).
           '--eh-highlight-rest-color': 'var(--eh-surface)',
@@ -405,19 +393,18 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   } as CSSProperties
 
   return (
-    // `data-task-id` só no card REAL: `MarketingQuadroPage` usa esse atributo
-    // para rolar até uma tarefa (ELO-2177). Se o overlay também o carregasse,
+    // `data-task-id` só no card REAL: a página do quadro usa esse atributo
+    // para rolar até uma tarefa. Se o overlay também o carregasse,
     // haveria dois elementos com o mesmo id durante o arrasto.
     <div ref={setNodeRef} data-task-id={overlay ? undefined : task.id} style={cardStyle} onClick={overlay ? undefined : onExpand} {...attributes} {...(readOnly ? {} : listeners)}>
-      {/* etiquetas estilo Trello (ELO-3182) — barra sólida ACIMA do título,
-          exclusiva da Pedagogia. Marketing/Administrativo mantêm o chip
+      {/* Etiquetas como barra sólida ACIMA do título,
+          exclusiva da Pedagogia. As demais áreas mantêm o chip
           pastel abaixo do checklist (ver chamada de LabelChips mais abaixo). */}
       {isPedagogia && <LabelChips labelIds={task.labels} labelsById={resolvedLabelsById} variant="solid" />}
       {/* title row */}
       <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
-        {/* Bolinha de status — sem equivalente no Trello (a cor da etiqueta já
-            carrega a informação lá). Some na Pedagogia (ELO-3182); Marketing/
-            Administrativo mantêm o indicador. */}
+        {/* Bolinha de status — some na Pedagogia, onde a cor da etiqueta já
+            carrega a informação. As demais áreas mantêm o indicador. */}
         {!isPedagogia && (
           <span
             style={{
@@ -433,21 +420,18 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
         <p
           style={{
             margin: 0,
-            // Valores do Trello real, com DUAS correções depois de comparar as
-            // capturas lado a lado:
+            // Duas correções de tipografia que não são arbitrárias:
             //
-            // 1. `lineHeight` era 14px — igual ao fontSize. Esse número veio de
-            //    um card de UMA linha, onde line-height não tem efeito visível.
-            //    Em título de várias linhas (a maioria aqui) as linhas ficam
-            //    coladas, e foi o "espaço mal otimizado" que o Marcos apontou.
-            //    O Trello usa ~20px de leading nesses casos.
-            // 2. `fontWeight` 500 vinha da Atlassian Sans (proprietária, não
-            //    importada). Na stack de fallback do Windows isso cai em Segoe
-            //    UI, que é mais pesada no mesmo peso nominal — daí a fonte
-            //    parecer "mais grossa" que a do Trello. 400 aproxima melhor a
-            //    densidade visual do original.
+            // 1. `lineHeight` era 14px — igual ao fontSize. Esse número só
+            //    funciona em card de UMA linha, onde line-height não tem efeito
+            //    visível. Em título de várias linhas (a maioria aqui) as linhas
+            //    ficam coladas; ~20px de leading resolve.
+            // 2. `fontWeight` 500 dependia de uma fonte que não é carregada.
+            //    Na stack de fallback do Windows isso cai em Segoe UI, mais
+            //    pesada no mesmo peso nominal — daí o texto parecer "mais
+            //    grosso" que o pretendido. 400 aproxima melhor a densidade.
             //
-            // Marketing/Administrativo mantêm os valores originais
+            // As demais áreas mantêm os valores originais
             // (13/500/1.45/--eh-text-strong).
             fontSize: isPedagogia ? 14 : 13,
             fontFamily: isPedagogia
@@ -462,7 +446,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
         >
           {task.title}
         </p>
-        {/* Botão ⋯ — menu de opções do card (Mover para / Clonar / Excluir). ELO-2153/ELO-2155. */}
+        {/* Botão ⋯ — menu de opções do card (Mover para / Clonar / Excluir). */}
         {!readOnly && (onMove || onClone || onDelete || onToggleArchive) && (
           <div style={{ flexShrink: 0 }} data-card-menu="">
             <button
@@ -687,8 +671,8 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
         )}
       </div>
 
-      {/* chip "Arquivada" (ELO-3182, correção ux-ui-reviewer) — texto, não só
-          opacidade, para ser perceptível independente de baixa visão. */}
+      {/* Chip "Arquivada" — texto, não só opacidade, para ser perceptível
+          independente de baixa visão. */}
       {task.archived && (
         <div style={{ marginTop: 6 }}>
           <span
@@ -709,7 +693,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
         </div>
       )}
 
-      {/* etiquetas (ELO-3182) — ausente/undefined em Marketing/Administrativo hoje.
+      {/* etiquetas — ausente/undefined em Marketing/Administrativo hoje.
           Na Pedagogia a barra já foi renderizada no topo do card (variant="solid"),
           então este chip pastel não duplica lá. */}
       {!isPedagogia && <LabelChips labelIds={task.labels} labelsById={resolvedLabelsById} />}
@@ -917,14 +901,11 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
               {fmtDate(dueDate)}
             </span>
           )}
-          {/* Contador de anexos (ELO-3184 Fase 1) — usa `task.attachments`
-              que já vem carregado junto com a task, sem leitura extra por
-              card (coluna Finalizados chega a ter 454 cards). Gated por
-              `isPedagogia`: a UI de upload/anexo (ELO-3184) é exclusiva da
-              Pedagogia — Marketing/Administrativo nunca gravam `attachments`
-              hoje, mas o gate deixa isso garantido por construção, não só
-              "na prática", e mantém os dois cards sem NENHUMA mudança de
-              pixel, como as demais seções deste componente. */}
+          {/* Contador de anexos — usa `task.attachments`, que já vem carregado
+              junto com a task, sem trabalho extra por card (uma coluna pode ter
+              centenas). Restrito a `isPedagogia` porque a UI de upload/anexo só
+              existe lá; as demais áreas nunca gravam `attachments`, e a
+              condição garante isso por construção. */}
           {isPedagogia && (task.attachments?.length ?? 0) > 0 && (
             <span
               title={`${task.attachments!.length} anexo(s)`}
@@ -945,13 +926,11 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
               {task.attachments!.length}
             </span>
           )}
-          {/* Contador de comentários (ELO-3183) — usa `task.commentCount`
-              (campo DESNORMALIZADO, incrementado/decrementado por
+          {/* Contador de comentários — usa `task.commentCount` (campo
+              DESNORMALIZADO, incrementado/decrementado por
               `addTaskComment`/`deleteTaskComment` em commentsApi.ts), nunca
-              uma leitura da subcoleção `comments` por card — mesmo
-              raciocínio do contador de anexos acima (454 cards numa única
-              coluna). Gated por `isPedagogia` pelo mesmo motivo: a UI de
-              comentários (ELO-3183) é exclusiva da Pedagogia nesta rodada. */}
+              carregando a thread por card: mesmo raciocínio do contador de
+              anexos acima. Restrito a `isPedagogia` pelo mesmo motivo. */}
           {isPedagogia && (task.commentCount ?? 0) > 0 && (
             <span
               title={`${task.commentCount} comentário(s)`}

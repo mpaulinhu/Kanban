@@ -6,7 +6,7 @@ import { labelColorTokens } from '../utils/labelColors'
 export const NO_LABEL_FILTER_KEY = '__no_label__'
 
 /**
- * Dropdown de filtro por etiqueta (ELO-3182), com opção explícita "Sem
+ * Dropdown de filtro por etiqueta, com opção explícita "Sem
  * etiqueta" — não é um estado implícito de "nenhum filtro selecionado", é
  * uma seleção própria que restringe às tarefas SEM nenhuma etiqueta.
  *
@@ -14,9 +14,8 @@ export const NO_LABEL_FILTER_KEY = '__no_label__'
  * própria — só o alvo da fusão aparece, e filtrar pelo alvo já cobre os
  * cards que ainda referenciam o id fundido (resolução em `resolveLabelDisplay`).
  *
- * ARIA + Escape (correção do gate ux-ui-reviewer, 15/09/2026): mesmo padrão
- * de `CreatePlannerProjectModal.tsx`/`PlannerBucketTree.tsx` neste mesmo
- * diretório — `aria-haspopup`/`aria-expanded`/`aria-controls` no botão,
+ * ARIA + Escape seguem o mesmo padrão dos demais popovers do app:
+ * `aria-haspopup`/`aria-expanded`/`aria-controls` no botão,
  * `role`+`aria-label` no painel, Escape fecha e devolve foco ao botão.
  */
 export function LabelFilterDropdown({
@@ -28,15 +27,12 @@ export function LabelFilterDropdown({
   labels: PMOfficeLabel[]
   selected: string[]
   onChange: (next: string[]) => void
-  /** ELO-3182 (2ª rodada: botão transparente por padrão, fundo translúcido só
-   * no hover/seleção — mesmo padrão de `.eh-pm-header-btn` em
-   * MarketingQuadroPage.tsx, ver `NavButton`) sobre o header escuro da
-   * Pedagogia — o painel ABERTO continua claro/normal (é um overlay
-   * flutuante, não faz parte da barra). `false` (default) preserva o
-   * visual atual para Marketing/Administrativo sem nenhuma mudança —
-   * na prática elas nunca chegam a passar esta prop, já que hoje não têm
-   * etiqueta gravada e o componente nem renderiza (`visibleLabels.length
-   * === 0`), mas a prop existe pra não depender só disso silenciosamente. */
+  /**
+   * Botão transparente por padrão, com fundo translúcido só no hover/seleção
+   * (mesmo padrão de `.eh-pm-header-btn`), para uso sobre o header escuro da
+   * Pedagogia. O painel ABERTO continua claro: é um overlay flutuante, não
+   * faz parte da barra. `false` (default) é o visual das demais áreas.
+   */
   pedagogia?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -152,7 +148,7 @@ export function LabelFilterDropdown({
           </label>
           <div style={{ height: 1, background: 'var(--eh-border)', margin: '4px 0' }} />
           {visibleLabels.map((label) => {
-            const { bg, fg } = labelColorTokens(label.trelloColor)
+            const { bg, fg } = labelColorTokens(label.colorKey)
             return (
               <label
                 key={label.id}

@@ -10,17 +10,15 @@ export interface FieldChange {
  * mudam a cada escrita (timestamp) ou são metadados internos, não "o que a
  * pessoa alterou".
  *
- * ELO-2101: `externalId`/`wbsOrder`/`syncedAt` entraram aqui pelo mesmo motivo
- * — são campos de sincronização do PM Office (ClickUp/Planner/Graph), nunca
- * uma edição intencional de alguém. Diferente de `status`/`projectType`/
- * `source`, que descrevem uma decisão humana e por isso são traduzidos
- * (ver `VALUE_LABEL` em `utils/auditDisplay.tsx`), não excluídos.
+ * `externalId`/`wbsOrder`/`syncedAt` entraram aqui pelo mesmo motivo: são
+ * campos de sincronização com sistemas externos, nunca uma edição intencional
+ * de alguém. Diferente de `status`/`projectType`/`source`, que descrevem uma
+ * decisão humana e por isso aparecem no diff.
  *
- * ELO-2021 (fix pós-QA): `updated_at` (snake_case) cobre APIs mais antigas
- * (ex. `authorsApi.ts`) que ainda não migraram para `updatedAt` — sem esta
- * variante, o `serverTimestamp()` desses campos vazava para
- * `metadata.changes`, e o Firestore rejeita `serverTimestamp()` dentro de um
- * array, derrubando a escrita do audit log (fail-silent, sem sinal na UI).
+ * `updated_at` (snake_case) cobre APIs mais antigas que ainda não migraram
+ * para `updatedAt`. Sem essa variante, o timestamp desses campos vazava para
+ * `metadata.changes` e derrubava a escrita do audit log — falha silenciosa,
+ * sem nenhum sinal na UI.
  */
 const IGNORED_FIELDS = new Set([
   'updatedAt', 'createdAt', 'uploadedAt', 'timestamp',
@@ -47,7 +45,7 @@ function isEqual(a: unknown, b: unknown): boolean {
  * Compara `before` (estado anterior do documento, ou `null` se é uma criação)
  * com `after` (os campos que a escrita está gravando — normalmente um patch
  * parcial, não o doc inteiro) e devolve só os campos que de fato mudaram de
- * valor. Usado para popular `metadata.changes` no Audit Log (ELO-2028).
+ * valor. Usado para popular `metadata.changes` no Audit Log.
  *
  * Só compara as chaves presentes em `after` — updates parciais não devem
  * gerar "diff" para campos que nem foram tocados.

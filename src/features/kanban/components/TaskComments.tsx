@@ -8,11 +8,10 @@ import type { PMTaskComment } from '../types/pmOffice'
 import { addTaskComment, canDeleteComment, canEditComment, deleteTaskComment, subscribeTaskComments, updateTaskComment } from '../api/commentsApi'
 
 /**
- * Formata `createdAt`/`updatedAt` como "29 de jun. de 2026, 09:44" — mesmo
- * padrão de exibição do Trello (captura de referência da issue). `Timestamp`
- * chega como `{ seconds, nanoseconds }` (às vezes ainda não resolvido — logo
- * após `serverTimestamp()`, o snapshot otimista local devolve `null` até o
- * servidor confirmar) — por isso o `null`-check antes de formatar.
+ * Formata `createdAt`/`updatedAt` como "29 de jun. de 2026, 09:44".
+ * `Timestamp` chega como `{ seconds, nanoseconds }` e pode ainda não estar
+ * resolvido logo após a criação otimista do comentário — daí o `null`-check
+ * antes de formatar.
  */
 function formatCommentDate(ts: PMTaskComment['createdAt'] | undefined): string {
   const secs = (ts as unknown as { seconds?: number } | null | undefined)?.seconds
@@ -24,7 +23,7 @@ function formatCommentDate(ts: PMTaskComment['createdAt'] | undefined): string {
 }
 
 /**
- * Thread de comentários da tarefa (ELO-3183) — coluna direita do modal em
+ * Thread de comentários da tarefa — coluna direita do modal em
  * modo "documento" da Pedagogia (ver `TaskDetailModal.tsx`). Escopo desta
  * rodada: só Pedagogia renderiza este componente; o shape/API não têm nada
  * de específico da área (ver JSDoc de `commentsApi.ts`).
@@ -40,7 +39,7 @@ export function TaskComments({
   area,
   projectName,
   taskTitle,
-  /** Viewer (`!isEditable`, mesma prop do resto do modal) só lê — não escreve, edita nem exclui, mesmo sendo o próprio autor de um comentário antigo (perfil somente-leitura por design, ELO-1954). */
+  /** Viewer (`!isEditable`, mesma prop do resto do modal) só lê — não escreve, edita nem exclui, mesmo sendo o próprio autor de um comentário antigo (perfil somente-leitura por design,). */
   isEditable,
 }: {
   projectId: string
@@ -159,7 +158,7 @@ export function TaskComments({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        // ELO-3182: fundo da coluna direita, mesmo tom neutro usado nas
+        // Fundo da coluna direita, mesmo tom neutro usado nas
         // seções expansíveis (Datas/Membros) do modo documento.
         background: 'var(--eh-pm-neutral-surface)',
       }}

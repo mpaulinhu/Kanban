@@ -15,10 +15,10 @@ export interface UserAvatarProps {
 
 /**
  * Avatar de usuário: foto de perfil quando existir, senão iniciais.
- * Extraído de `features/users/pages/UsersPage.tsx` (ELO-2166) — lá o
- * fallback de iniciais é colorido por perfil de acesso (`RoleDef`); aqui a
- * cor é neutra por padrão porque este componente é usado em contextos
- * (ex.: mural de avatares do Dashboard) que não devem expor role.
+ *
+ * A cor do fallback é neutra por padrão, e não derivada do perfil de acesso:
+ * este componente aparece em contextos coletivos (ex.: mural de avatares) que
+ * não devem expor o papel de ninguém. Quem quiser colorir passa `bg`/`fg`.
  */
 export function UserAvatar({ name, photoURL, size, bg = 'var(--eh-surface-2)', fg = 'var(--eh-text-2)' }: UserAvatarProps) {
   const [broken, setBroken] = useState(false)

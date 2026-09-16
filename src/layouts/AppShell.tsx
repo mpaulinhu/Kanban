@@ -3,8 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { ImmersiveContext, shouldResetImmersive } from './ImmersiveContext'
 
 /**
- * Casca do app. Equivale ao `AppLayout` do CoreHub (sidebar + topbar), mas
- * reduzida ao que o quadro realmente precisa.
+ * Casca do app, reduzida ao que o quadro realmente precisa.
  *
  * O padding de 24px do `<main>` é deliberado, não decorativo: a página do
  * quadro o COMPENSA com margem negativa do mesmo tamanho
@@ -29,21 +28,6 @@ export function AppShell() {
   return (
     <ImmersiveContext.Provider value={{ immersive, setImmersive }}>
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--eh-bg)' }}>
-        {!immersive && (
-          <header
-            style={{
-              height: 52,
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              padding: '0 20px',
-              background: 'var(--eh-surface)',
-              borderBottom: '1px solid var(--eh-border)',
-            }}
-          >
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--eh-text-strong)' }}>Kanban</span>
-          </header>
-        )}
         {/* O padding fica SEMPRE, inclusive em modo ampliado — a página já o
             compensa com margem negativa própria, independente de o cabeçalho
             estar visível. Zerá-lo aqui faria o quadro vazar 24px para fora da

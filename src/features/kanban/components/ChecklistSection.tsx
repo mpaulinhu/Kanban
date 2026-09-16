@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChecklistItem, MarketingTaskTemplate } from '../types/pmOffice'
-import { subscribeAreaTemplates } from '../api/marketingPlannerApi'
+import { subscribeTemplates } from '../api/marketingPlannerApi'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-
-/** Mesmo union restrito de `subscribeAreaTemplates`/`MarketingTaskTemplate['area']` — templates de checklist só existem para estas 3 áreas, não as 7 de `PmArea`. */
-type TemplateArea = NonNullable<MarketingTaskTemplate['area']>
 
 // Mesma normalização de `NewMarketingTaskModal.tsx` (`normalizeBucketName`) —
 // trata variantes Unicode de hífen/espaço que apareceriam como "categoria
@@ -39,8 +36,8 @@ function resolveStatus(item: ChecklistItem): ChecklistStatus {
  * Subtarefas de uma tarefa (checklist) — extraído do bloco que já existia no
  * modo formulário clássico de `TaskDetailModal.tsx` (`task.source === 'graph'`),
  * que a Pedagogia nunca usa. Reaproveitado aqui, sem duplicar, para o modo
- * documento (`PedagogiaDocumentBody.tsx`, ELO-3182) também poder criar/editar/
- * mudar status/excluir subtarefa (ELO-3199) — antes só dava pra VER o resumo
+ * documento (`PedagogiaDocumentBody.tsx`) também poder criar/editar/
+ * mudar status/excluir subtarefa — antes só dava pra VER o resumo
  * no card do quadro, não mexer de dentro do modal.
  */
 export function ChecklistSection({
@@ -52,7 +49,6 @@ export function ChecklistSection({
   onRenameItem,
   onDeleteItem,
   focusInputSignal,
-  area,
   bucketName,
   onApplyTemplate,
 }: {
@@ -71,15 +67,11 @@ export function ChecklistSection({
    */
   focusInputSignal?: number
   /**
-   * "Aplicar template" (ELO-3201) — os três abaixo precisam estar presentes
-   * juntos pra ação aparecer. `area`/`bucketName` resolvem QUAIS templates
-   * mostrar (mesmo critério de `NewMarketingTaskModal.tsx`: `categorias[]`
-   * do template batendo com o nome do bucket ATUAL da tarefa — decisão
-   * confirmada com o Marcos de manter esse vínculo, não simplificar pra
-   * "todo template em qualquer lugar"). `onApplyTemplate` é quem GRAVA
-   * (ADICIONA ao checklist existente, nunca substitui).
+   * "Aplicar template" — os dois abaixo precisam estar presentes juntos para
+   * a ação aparecer. `bucketName` resolve QUAIS templates mostrar: só os que
+   * listam a coluna atual da tarefa em `categorias[]`. `onApplyTemplate` é
+   * quem grava, ADICIONANDO ao checklist existente em vez de substituí-lo.
    */
-  area?: TemplateArea
   bucketName?: string
   onApplyTemplate?: (template: MarketingTaskTemplate) => Promise<void>
 }) {
@@ -100,14 +92,14 @@ export function ChecklistSection({
   const templateBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    if (!area || !bucketName || !onApplyTemplate) { setAvailableTemplates([]); return }
-    const unsub = subscribeAreaTemplates(area, (all) => {
+    if (!bucketName || !onApplyTemplate) { setAvailableTemplates([]); return }
+    const unsub = subscribeTemplates((all) => {
       setAvailableTemplates(
         all.filter((t) => t.categorias.some((cat) => normalizeBucketName(cat) === normalizeBucketName(bucketName))),
       )
     })
     return unsub
-  }, [area, bucketName, onApplyTemplate])
+  }, [bucketName, onApplyTemplate])
 
   useEffect(() => {
     if (!openDropdownId) return

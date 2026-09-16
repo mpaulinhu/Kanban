@@ -2,12 +2,11 @@ import { useMemo } from 'react'
 import { diffFields } from '../utils/diffFields'
 
 /**
- * Trilha de auditoria. No CoreHub cada ação vira um documento no Firestore
- * (~780 linhas entre API e tipos); aqui só registra no console, mantendo a
- * mesma superfície para os componentes que já chamam `audit.logTask(...)`.
+ * Trilha de auditoria: registra no console cada ação relevante do quadro.
  *
- * Ponto de extensão: para voltar a persistir, basta trocar o corpo destas
- * funções — nenhum componente precisa mudar.
+ * Ponto de extensão: para passar a persistir, basta trocar o corpo destas
+ * funções — nenhum componente precisa mudar, porque todos já chamam
+ * `audit.logTask(...)` e afins.
  */
 
 type AuditAction = string

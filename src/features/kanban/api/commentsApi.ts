@@ -1,7 +1,7 @@
 /**
- * Comentários de tarefa em memória — mesma superfície do `commentsApi` do
- * CoreHub. `PMTask.commentCount` continua sendo o contador desnormalizado que
- * o card do quadro lê, mantido em sincronia a cada criação/exclusão.
+ * Comentários de tarefa em memória. `PMTask.commentCount` é o contador
+ * desnormalizado que o card do quadro lê, mantido em sincronia a cada
+ * criação/exclusão.
  */
 
 import type { PMTaskComment } from '../types/pmOffice'
@@ -9,15 +9,10 @@ import { CURRENT_USER, getState, mutate, newId, subscribe, tsNow } from './store
 
 type Unsubscribe = () => void
 
-/**
- * Nível de `admin` na hierarquia do monorepo
- * (`datametria_super_admin` 0 → `super_admin` 1 → `admin` 2 → …) — o original
- * importa `ROLE_LEVELS` de `@eloeditorial/shared-types`, pacote que não existe
- * neste app.
- */
+/** Nível numérico de `admin` — quanto MENOR o número, maior o privilégio. */
 const ADMIN_ROLE_LEVEL = 2
 
-/** Thread em ordem cronológica (mais antigo primeiro), igual ao original. */
+/** Thread em ordem cronológica (mais antigo primeiro). */
 export function subscribeTaskComments(
   _projectId: string,
   _bucketId: string,

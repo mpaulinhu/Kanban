@@ -9,8 +9,7 @@ export interface UserProfilePopoverAction {
 }
 
 /**
- * Popover de perfil de um usuário (ELO-3182/ELO-3183) — mesmo padrão do
- * Trello real: ao clicar num avatar, abre um cartão com header colorido
+ * Popover de perfil de um usuário: ao clicar num avatar, abre um cartão com header colorido
  * (foto grande + nome + e-mail, já que este app não tem "@handle") e uma
  * lista opcional de ações abaixo (ex.: "Remover do Cartão" no modal de
  * tarefa; sem ação nenhuma no avatar do próprio usuário na Sidebar).
@@ -50,8 +49,7 @@ export function UserProfilePopover({
     // Rolagem FECHA em vez de reposicionar. Acompanhar o âncora parecia o
     // certo, mas o popover é `position: fixed` e não é recortado por nenhum
     // container: ao rolar a coluna do quadro, ele seguia o avatar para fora
-    // da área visível e passava por cima do cabeçalho da página. Fechar é
-    // também o que o Trello faz.
+    // da área visível e passava por cima do cabeçalho da página.
     const onScroll = (e: Event) => {
       if (popRef.current?.contains(e.target as Node)) return
       onClose()

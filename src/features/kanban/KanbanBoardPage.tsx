@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { DndContext, DragOverlay, MeasuringStrategy, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core'
+import { DndContext, DragOverlay, MeasuringStrategy, PointerSensor, closestCenter, closestCorners, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { CSSProperties, ReactNode } from 'react'
@@ -35,6 +35,8 @@ import { usePmAudit } from './hooks/usePmAudit'
 import { diffFields } from './utils/diffFields'
 import { MarketingKanbanCard } from './components/MarketingKanbanCard'
 import { LabelFilterDropdown, NO_LABEL_FILTER_KEY } from './components/LabelFilterDropdown'
+import { AssigneeFilterDropdown, SortDropdown, StatusFilterDropdown, NO_ASSIGNEE_FILTER_KEY } from './components/BoardFiltersDropdown'
+import { InlineEditableText } from './components/InlineEditableText'
 import { TaskDetailModal } from './components/TaskDetailModal'
 import { NewMarketingTaskModal } from './components/NewMarketingTaskModal'
 import { TeamModal } from './components/TeamModal'
@@ -49,10 +51,87 @@ const PLUS_ICON =
 const COLUMN_ACCENT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4']
 
 /**
- * Base de rota por área. No CoreHub cada área tem seu próprio prefixo
- * (`/pm-office-marketing` etc.); aqui só existe a Pedagogia, então a base é
- * a raiz — as telas ficam em `/quadro`, `/grade`, `/calendario`,
- * `/templates` (ver `main.tsx`).
+ * Fundos de coluna, todos claros. O que separa o card branco da coluna nesta
+ * tela é a SOMBRA do card, não a diferença de cor — o cinza padrão mede só
+ * 1,12:1 contra o branco e funciona bem. Por isso estes tons não precisam ser
+ * escuros: basta ficarem na mesma faixa do padrão (~1,1–1,3:1), onde o texto
+ * escuro do cabeçalho da coluna segue com folga larga (>10:1). Escurecê-los
+ * Para "criar contraste" com o card só deixaria o quadro pesado sem resolver
+ * nada que a sombra já não resolva.
+ */
+const COLUMN_COLORS: { id: string; label: string; bg: string }[] = [
+  { id: 'default', label: 'Padrão', bg: 'rgb(241, 242, 244)' },
+  { id: 'gray', label: 'Cinza', bg: '#e1e4e9' },
+  { id: 'blue', label: 'Azul', bg: '#d8e8fa' },
+  { id: 'green', label: 'Verde', bg: '#d6efe0' },
+  { id: 'yellow', label: 'Amarelo', bg: '#f7ebc4' },
+  { id: 'orange', label: 'Laranja', bg: '#fadfc8' },
+  { id: 'red', label: 'Vermelho', bg: '#fad8d2' },
+  { id: 'purple', label: 'Roxo', bg: '#e6d6f7' },
+]
+
+type SortOption = 'manual' | 'alpha' | 'alpha-desc' | 'due-asc' | 'due-desc'
+
+/**
+ * Ordena uma coluna. Tarefa sem data fica sempre no FIM, nos dois sentidos —
+ * "sem prazo" não é nem o mais próximo nem o mais distante, e jogá-la pro topo
+ * no modo decrescente enterraria as datas reais.
+ */
+function sortTasks(list: PMTask[], sort: SortOption): PMTask[] {
+  const secs = (t: PMTask) => (t.dueDate as { seconds: number } | null)?.seconds ?? null
+  return [...list].sort((a, b) => {
+    switch (sort) {
+      case 'alpha':
+        return a.title.localeCompare(b.title, 'pt-BR')
+      case 'alpha-desc':
+        return b.title.localeCompare(a.title, 'pt-BR')
+      case 'due-asc':
+      case 'due-desc': {
+        const da = secs(a)
+        const db = secs(b)
+        if (da === null && db === null) return 0
+        if (da === null) return 1
+        if (db === null) return -1
+        return sort === 'due-asc' ? da - db : db - da
+      }
+      default:
+        return 0
+    }
+  })
+}
+
+const SORT_OPTIONS: { id: SortOption; label: string }[] = [
+  { id: 'manual', label: 'Ordem manual' },
+  { id: 'alpha', label: 'Título (A–Z)' },
+  { id: 'alpha-desc', label: 'Título (Z–A)' },
+  { id: 'due-asc', label: 'Data (mais próxima)' },
+  { id: 'due-desc', label: 'Data (mais distante)' },
+]
+
+const STATUS_OPTIONS: { id: PMTask['status']; label: string }[] = [
+  { id: 'todo', label: 'A fazer' },
+  { id: 'in_progress', label: 'Em andamento' },
+  { id: 'done', label: 'Concluída' },
+  { id: 'atrasado', label: 'Atrasada' },
+]
+
+/** Cor por coluna, só no navegador — mesma decisão do nome do quadro. */
+const COLUMN_COLORS_STORAGE_KEY = 'kanban:column-colors'
+
+function readStoredColumnColors(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(COLUMN_COLORS_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Base de rota por área. Só a Pedagogia está ativa, e a base dela é a raiz —
+ * as telas ficam em `/quadro`, `/grade`, `/calendario`, `/templates` (ver
+ * `main.tsx`). As outras entradas existem para quando uma segunda área for
+ * montada sob prefixo próprio.
  */
 const NAV_BASE: Record<'marketing' | 'administrativo' | 'pedagogia', string> = {
   marketing: '/pm-office-marketing',
@@ -66,9 +145,25 @@ const DEFAULT_TITLE: Record<'marketing' | 'administrativo' | 'pedagogia', string
 }
 
 /**
- * `pedagogia` (ELO-3182, refinamento visual — 2ª rodada: "os botões são
- * caixas brancas sólidas... no Trello são transparentes, texto branco,
- * ganham fundo translúcido só no hover"). Repouso: sem fundo/borda (via
+ * Nome do quadro, editável no cabeçalho. Fica só no navegador de propósito:
+ * a tela é uma casca de front-end para demonstrar a quem for usá-la, e o
+ * nome do quadro muda por cliente. Quando virar produto de verdade, isto sai
+ * daqui e vira um campo do quadro no backend.
+ */
+const BOARD_TITLE_STORAGE_KEY = 'kanban:board-title'
+
+function readStoredBoardTitle(): string | null {
+  try {
+    return localStorage.getItem(BOARD_TITLE_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * `pedagogia`: botões do header transparentes sobre o fundo do quadro, com
+ * texto branco, ganhando fundo translúcido só no hover. Repouso: sem
+ * fundo/borda (via
  * classe `.eh-pm-header-btn`, que também cobre o `:hover` — não declarável
  * inline). Ativo ("Quadro"): fundo translúcido mais forte + borda, via
  * `data-active` (mesma classe lê o atributo). Default `false` preserva o
@@ -114,6 +209,31 @@ function NavButton({ label, active, onClick, pedagogia = false }: { label: strin
 
 // Wrapper sortable para colunas do Quadro. Os listeners ficam apenas no cabeçalho
 // para não interferir com o DnD vertical de tarefas dentro da coluna.
+/**
+ * Detecção de colisão por tipo do item arrastado.
+ *
+ * O `DndContext` é único (colunas e cards juntos), então `closestCenter` sozinho
+ * comparava a coluna arrastada contra TODOS os droppables — inclusive cada card.
+ * Como os cards são muito mais numerosos e ficam espalhados na vertical, o alvo
+ * vencedor quase sempre era um card, e o `dragEnd` descartava o drop no guard de
+ * `type !== 'column'`: a coluna simplesmente voltava pro lugar. Restringir aos
+ * droppables de coluna é o que torna o alvo alcançável.
+ *
+ * `closestCorners` em vez de `closestCenter` para colunas: numa fileira
+ * horizontal de colunas com alturas muito diferentes, comparar centros faz uma
+ * coluna curta perder para uma longa que nem está sob o cursor. Cantos comparam
+ * a proximidade real das bordas.
+ */
+function collisionDetectionByType(args: Parameters<typeof closestCenter>[0]) {
+  if (args.active.data.current?.type === 'column') {
+    const onlyColumns = args.droppableContainers.filter(
+      (c) => c.data.current?.type === 'column',
+    )
+    return closestCorners({ ...args, droppableContainers: onlyColumns })
+  }
+  return closestCenter(args)
+}
+
 function SortableColumn({
   id,
   outerStyle,
@@ -236,11 +356,10 @@ function getDueDateDay(task: PMTask): string | null {
 }
 
 /**
- * No CoreHub este componente serve três áreas (Marketing, Administrativo,
- * Pedagogia) via prop `area`, e só a Pedagogia recebeu o tratamento visual
- * estilo Trello. Aqui a área é fixa em 'pedagogia': é esse o visual que se
- * quis extrair, e prender o valor mantém vivos os ramos `isPedagogia` sem
- * arrastar a parametrização das outras duas.
+ * O componente é escrito para servir mais de uma área via prop `area`, mas
+ * aqui o valor é fixo em 'pedagogia' — é a única área montada, e prender o
+ * valor mantém vivos os ramos `isPedagogia` (o tratamento visual de quadro)
+ * sem arrastar a parametrização das demais.
  */
 export function KanbanBoardPage() {
   const area = 'pedagogia' as const
@@ -251,19 +370,19 @@ export function KanbanBoardPage() {
   const { immersive, setImmersive } = useImmersive()
   const { canWriteScreen } = useRole()
   const canWrite = canWriteScreen()
-  // ELO-2177: tarefa clicada em "Minhas Tarefas" (Dashboard) — repassada para
+  // Tarefa clicada em "Minhas Tarefas" (Dashboard) — repassada para
   // o Kanban rolar até ela (nos dois eixos) e destacá-la temporariamente.
   // Marketing não tem rota granular por bucket (ver buildTaskLink em
   // pmOfficeApi.ts), então o mesmo efeito acontece dentro do quadro único
   // via query string, em vez de navegação para uma página filha.
   const [searchParams, setSearchParams] = useSearchParams()
   const highlightTaskId = searchParams.get('taskId')
-  // ELO-2177: guarda o id JÁ destacado, não um boolean — evita o loop em que o
+  // Guarda o id JÁ destacado, não um boolean — evita o loop em que o
   // efeito de reset (2s) reabre a "trava" e o efeito de aplicar dispara de novo
   // para o MESMO highlightTaskId (que nunca muda, pois some da URL só ao final).
   const consumedTaskIdRef = useRef<string | null>(null)
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null)
-  // ELO-2177: remove `?taskId=` da URL depois que o destaque foi consumido, sem
+  // Remove `?taskId=` da URL depois que o destaque foi consumido, sem
   // criar entrada nova no histórico (senão o botão "voltar" fica poluído).
   function clearHighlightParam() {
     setSearchParams(
@@ -276,26 +395,30 @@ export function KanbanBoardPage() {
     )
   }
   const [projectId, setProjectId] = useState<string | null>(null)
-  const [projectTitle, setProjectTitle] = useState(DEFAULT_TITLE[area])
+  const [projectTitle, setProjectTitle] = useState(() => readStoredBoardTitle() ?? DEFAULT_TITLE[area])
   const [projectTeam, setProjectTeam] = useState<string[]>([])
-  // ELO-2044: audit log das ações humanas deste quadro.
+  const [columnColors, setColumnColors] = useState<Record<string, string>>(readStoredColumnColors)
+  // Audit log das ações humanas deste quadro.
   const audit = usePmAudit(area, projectId, projectTitle)
   const [buckets, setBuckets] = useState<PMBucket[]>([])
   const [tasks, setTasks] = useState<PMTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [users, setUsers] = useState<UserRecord[]>([])
-  // ELO-3182: dicionário de etiquetas do projeto + filtro selecionado (ids +
+  // Dicionário de etiquetas do projeto + filtro selecionado (ids +
   // possivelmente NO_LABEL_FILTER_KEY) + toggle de tarefas arquivadas.
   // Vazio em Marketing/Administrativo hoje (nenhuma etiqueta gravada lá) —
   // aditivo por construção, não muda o comportamento dessas duas áreas.
   const [labels, setLabels] = useState<PMOfficeLabel[]>([])
   const [labelFilter, setLabelFilter] = useState<string[]>([])
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [sortBy, setSortBy] = useState<SortOption>('manual')
   const [showArchived, setShowArchived] = useState(false)
   const labelsById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels])
-  // ELO-3182: feedback de arquivar/desarquivar (correção do gate ux-ui-reviewer
-  // — o card sumindo/reaparecendo sem nenhum aviso era ambíguo com exclusão
-  // ou erro silencioso). `undo` reaplica a transição oposta.
+  // Feedback de arquivar/desarquivar: o card sumindo/reaparecendo sem nenhum
+  // aviso é ambíguo com exclusão ou erro silencioso. `undo` reaplica a
+  // transição oposta.
   const [archiveToast, setArchiveToast] = useState<{ message: string; variant: 'success' | 'error'; undo?: () => void } | null>(null)
 
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
@@ -316,11 +439,11 @@ export function KanbanBoardPage() {
   const [deleteBucketTarget, setDeleteBucketTarget] = useState<PMBucket | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // ELO-2155: exclusão de tarefa via menu do card
+  // Exclusão de tarefa via menu do card
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<PMTask | null>(null)
   const [deletingTask, setDeletingTask] = useState(false)
 
-  // ELO-2154: menu de 3 pontos para opções de coluna
+  // Menu de 3 pontos para opções de coluna
   const [openMenuBucketId, setOpenMenuBucketId] = useState<string | null>(null)
   const [menuAnchorRect, setMenuAnchorRect] = useState<{ top: number; bottom: number; left: number; right: number; width: number } | null>(null)
   const [editingBucketId, setEditingBucketId] = useState<string | null>(null)
@@ -334,7 +457,7 @@ export function KanbanBoardPage() {
   // Sem níveis de acesso neste app (ver `useRole`) — todo usuário vê tudo.
   const canSeeTemplates = true
 
-  // ELO-3182: 4px na Pedagogia (era 8 para todos). 8px é uma "zona morta"
+  // 4px na Pedagogia (era 8 para todos). 8px é uma "zona morta"
   // perceptível — o card só começa a responder depois de meio centímetro de
   // movimento, o que lê como travamento. 4px ainda protege o clique acidental
   // (abrir o card) sem esse atraso. Demais áreas seguem em 8.
@@ -343,10 +466,10 @@ export function KanbanBoardPage() {
   )
   // active.data.current é LIVE no @dnd-kit: re-renders durante o drag atualizam o dado.
   // Capturamos o bucket original em handleDragStart (antes de qualquer optimistic update)
-  // e o bucket corrente em activeBucketRef (atualizado pelo handleDragOver). ELO-2153.
+  // e o bucket corrente em activeBucketRef (atualizado pelo handleDragOver).
   const originalBucketRef = useRef<string | null>(null)
   const activeBucketRef = useRef<string | null>(null)
-  // ELO-3182 (Pedagogia): id da tarefa em arrasto, para renderizar o
+  // (Pedagogia): id da tarefa em arrasto, para renderizar o
   // `DragOverlay` — ver handleDragStart.
   const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null)
   const activeDragTask = activeDragTaskId ? tasks.find((t) => t.id === activeDragTaskId) ?? null : null
@@ -371,16 +494,17 @@ export function KanbanBoardPage() {
     setLabels([])
     setLocalBucketOrder([])
     setLocalTaskOrder({})
-    setProjectTitle(DEFAULT_TITLE[area])
+    setProjectTitle(readStoredBoardTitle() ?? DEFAULT_TITLE[area])
     setProjectTeam([])
-    // ELO-2936: para 'marketing' resolve exatamente como antes (via
+    // Para 'marketing' resolve exatamente como antes (via
     // `getMarketingProject` dentro de `getOrCreateAreaProject`); para
     // 'administrativo' cria o projeto singleton na 1ª visita (idempotente).
     getOrCreateAreaProject(area)
       .then((proj) => {
         if (cancelled) return
         setProjectId(proj.id)
-        if (proj.title) setProjectTitle(proj.title)
+        // O nome editado no cabeçalho é local e vence o que vem do backend.
+        if (proj.title && !readStoredBoardTitle()) setProjectTitle(proj.title)
         if (proj.team) setProjectTeam(proj.team)
       })
       .catch(() => {
@@ -402,15 +526,15 @@ export function KanbanBoardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showArchived intencionalmente re-assina o listener (não é um filtro client-side sobre o mesmo snapshot)
   }, [projectId, showArchived])
 
-  // ELO-3182: dicionário de etiquetas do projeto — vazio em Marketing/Administrativo hoje.
+  // Dicionário de etiquetas do projeto — vazio em Marketing/Administrativo hoje.
   useEffect(() => {
     if (!projectId) return
     return subscribePMOfficeLabels(projectId, setLabels)
   }, [projectId])
 
-  // ELO-2804: usa usersApi.listUsers() (sem includeInactive) em vez de query
-  // direta ao Firestore — herda o filtro de inativos da ELO-2803 e o
-  // `photoURL` (ELO-2661) sem reimplementar os dois aqui. Não filtra
+  // Usa usersApi.listUsers() (sem includeInactive) em vez de ler a lista
+  // crua: herda o filtro de inativos e o `photoURL` sem reimplementar os dois
+  // aqui. Não filtra
   // `task.assigneesNames`/`task.assignees` já persistidos na tarefa: essas
   // listas são um snapshot no momento da atribuição, resolvidas no card e no
   // modal independente deste array — só as OPÇÕES de novo assignment encolhem.
@@ -425,7 +549,7 @@ export function KanbanBoardPage() {
     if (addingBucket) newBucketRef.current?.focus()
   }, [addingBucket])
 
-  // ELO-2154: fecha o menu de opções ao clicar fora do dropdown
+  // Fecha o menu de opções ao clicar fora do dropdown
   useEffect(() => {
     if (!openMenuBucketId) return
     function onPointerDown(e: PointerEvent) {
@@ -437,12 +561,12 @@ export function KanbanBoardPage() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [openMenuBucketId])
 
-  // ELO-2154: foca o input de renomeação ao entrar em modo de edição
+  // Foca o input de renomeação ao entrar em modo de edição
   useEffect(() => {
     if (editingBucketId) editingInputRef.current?.focus()
   }, [editingBucketId])
 
-  // ELO-2154: clamp do dropdown para não sair da viewport
+  // Clamp do dropdown para não sair da viewport
   useLayoutEffect(() => {
     if (!menuDropdownRef.current || !menuAnchorRect) return
     const el = menuDropdownRef.current
@@ -456,15 +580,20 @@ export function KanbanBoardPage() {
     }
   }, [openMenuBucketId, menuAnchorRect])
 
-  // Sincroniza a ordem local de colunas quando o Firestore atualiza os buckets
+  // Sincroniza a ordem local de colunas quando os buckets mudam
   useEffect(() => {
     setLocalBucketOrder(buckets.map((b) => b.id))
   }, [buckets])
 
-  const teamUsers = useMemo(
-    () => (projectTeam.length > 0 ? users.filter((u) => projectTeam.includes(u.name)) : users),
-    [users, projectTeam],
-  )
+  // `project.team` guarda UIDs (ver `seed.ts`), mas comparar só por `name` não
+  // casava com ninguém — a lista saía vazia e o app caía no fallback de "todos
+  // os usuários", mascarando o erro. Aceita os dois, porque quadros antigos
+  // podem ter gravado nome em vez de UID.
+  const teamUsers = useMemo(() => {
+    if (projectTeam.length === 0) return users
+    const filtered = users.filter((u) => projectTeam.includes(u.uid) || projectTeam.includes(u.name))
+    return filtered.length > 0 ? filtered : users
+  }, [users, projectTeam])
 
   const expandedTask = useMemo(
     () => tasks.find((t) => t.id === expandedTaskId) ?? null,
@@ -476,17 +605,16 @@ export function KanbanBoardPage() {
     [buckets],
   )
 
-  // ELO-3182 (correção do gate ux-ui-reviewer): ligar "Mostrar arquivadas"
-  // num quadro sem nenhuma arquivada não mudava nada na tela — indistinguível
-  // de botão quebrado. `archivedCount` alimenta o banner de estado vazio
-  // logo abaixo do header.
+  // Ligar "Mostrar arquivadas" num quadro sem nenhuma arquivada não mudaria
+  // nada na tela — indistinguível de botão quebrado. `archivedCount` alimenta
+  // o banner de estado vazio logo abaixo do header.
   const archivedCount = useMemo(
     () => (showArchived ? tasks.filter((t) => t.archived === true).length : 0),
     [tasks, showArchived],
   )
 
   /**
-   * ELO-3182: tarefa passa no filtro de etiqueta selecionado. Sem seleção
+   * Tarefa passa no filtro de etiqueta selecionado. Sem seleção
    * (array vazio) → todas passam, comportamento idêntico ao anterior à
    * issue (Marketing/Administrativo nunca têm `labelFilter` não-vazio, já
    * que não há UI para popular `labels` lá hoje — dropdown só aparece
@@ -502,20 +630,34 @@ export function KanbanBoardPage() {
   const tasksByBucket = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     const visible = tasks.filter((t) => {
-      // Refinamento visual Pedagogia (ELO-3182): decisão explícita do Marcos
-      // — SEM seção colapsável "Tarefas concluídas", como no Trello real
-      // (nenhuma lista tem esse recurso lá; todo card fica solto na coluna).
-      // `done` entra na mesma lista/SortableContext das demais, ciente do
-      // custo de performance de montar todos os cards de uma vez (medido e
-      // reportado — ver `content-visibility` no MarketingKanbanCard.tsx).
-      // Marketing/Administrativo mantêm o filtro original (só todo/in_progress
-      // aqui; done vai para doneTasksByBucket → seção colapsável).
+      // Pedagogia: SEM seção colapsável "Tarefas concluídas" — todo card fica
+      // solto na coluna. `done` entra na mesma lista/SortableContext das
+      // demais, assumindo o custo de montar todos os cards de uma vez (ver o
+      // comentário sobre `content-visibility` em MarketingKanbanCard.tsx antes
+      // de tentar otimizar isso). As outras áreas mantêm o filtro original:
+      // só todo/in_progress aqui, e done vai para doneTasksByBucket → seção
+      // colapsável.
+      // `atrasado` entra junto: é um status real e persistido, e
+      // deixá-lo de fora sumia com a tarefa do quadro inteiro — não só a
+      // escondia de um filtro.
       if (area === 'pedagogia') {
-        if (t.status !== 'todo' && t.status !== 'in_progress' && t.status !== 'done') return false
+        if (t.status !== 'todo' && t.status !== 'in_progress' && t.status !== 'done' && t.status !== 'atrasado') return false
       } else if (t.status !== 'todo' && t.status !== 'in_progress') {
         return false
       }
       if (!matchesLabelFilter(t)) return false
+      // Status e responsável são AND entre si (e com etiqueta): cada filtro
+      // ligado estreita o conjunto. Dentro de um mesmo filtro é OR — marcar
+      // duas pessoas mostra tarefas de qualquer uma das duas.
+      if (statusFilter.length > 0 && !statusFilter.includes(t.status)) return false
+      if (assigneeFilter.length > 0) {
+        const uids = t.assignees ?? []
+        const semResponsavel = uids.length === 0
+        const casa = assigneeFilter.includes(NO_ASSIGNEE_FILTER_KEY)
+          ? semResponsavel || uids.some((u) => assigneeFilter.includes(u))
+          : uids.some((u) => assigneeFilter.includes(u))
+        if (!casa) return false
+      }
       if (!q) return true
       return (
         t.title.toLowerCase().includes(q) ||
@@ -538,9 +680,9 @@ export function KanbanBoardPage() {
     }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps -- matchesLabelFilter fecha sobre labelFilter, listado explicitamente abaixo
-  }, [tasks, searchQuery, labelFilter, area])
+  }, [tasks, searchQuery, labelFilter, assigneeFilter, statusFilter, area])
 
-  // Sincroniza localTaskOrder com tasksByBucket quando o Firestore atualiza as tarefas.
+  // Sincroniza localTaskOrder com tasksByBucket quando as tarefas mudam.
   // Preserva a ordem manual dentro do mesmo grupo de dueDate, mas sempre respeita a ordem
   // natural entre grupos (tarefa que ganhou/perdeu dueDate é reposicionada automaticamente).
   useEffect(() => {
@@ -610,7 +752,7 @@ export function KanbanBoardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- matchesLabelFilter fecha sobre labelFilter, listado explicitamente abaixo
   }, [tasks, searchQuery, labelFilter, area])
 
-  // ELO-2177: reinicia o destaque sempre que o taskId da URL mudar (ex.: um
+  // Reinicia o destaque sempre que o taskId da URL mudar (ex.: um
   // novo clique em "Minhas Tarefas" enquanto o Kanban já está aberto).
   useEffect(() => {
     if (highlightTaskId !== consumedTaskIdRef.current) {
@@ -619,7 +761,7 @@ export function KanbanBoardPage() {
     }
   }, [highlightTaskId])
 
-  // ELO-2177: se a tarefa alvo está na seção "Tarefas concluídas" (colapsada
+  // Se a tarefa alvo está na seção "Tarefas concluídas" (colapsada
   // por padrão), expande o bucket correspondente antes do scroll poder achá-la.
   useEffect(() => {
     if (!highlightTaskId) return
@@ -633,7 +775,7 @@ export function KanbanBoardPage() {
     })
   }, [highlightTaskId, tasks])
 
-  // ELO-2177: rola até o card em dois eixos (coluna horizontalmente dentro do
+  // Rola até o card em dois eixos (coluna horizontalmente dentro do
   // board, depois o card verticalmente dentro da coluna) e aplica o pulso
   // visual. `scrollIntoView` com `inline: 'center'` cobriria os dois eixos
   // num único container de scroll, mas aqui há DOIS containers de scroll
@@ -646,7 +788,7 @@ export function KanbanBoardPage() {
     // acontece num efeito separado acima) antes de procurar o elemento.
     const timer = setTimeout(() => {
       const el = document.querySelector(`[data-task-id="${highlightTaskId}"]`)
-      if (!el) return // tarefa não encontrada no DOM — falha silenciosa (ELO-2177)
+      if (!el) return // tarefa não encontrada no DOM — falha silenciosa
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
       // Passo 2: depois que o scroll horizontal assenta, garante o
       // enquadramento vertical dentro da coluna (o `inline: 'center'` acima
@@ -673,7 +815,7 @@ export function KanbanBoardPage() {
     return () => clearTimeout(timer)
   }, [activeHighlightId])
 
-  /** ELO-2177: clicar no card destacado cancela o pulso na hora, além do
+  /** Clicar no card destacado cancela o pulso na hora, além do
    * comportamento normal do clique (expandir o card). */
   function handleExpandTask(task: PMTask) {
     if (task.id === activeHighlightId) {
@@ -727,7 +869,7 @@ export function KanbanBoardPage() {
     if (bucketId) audit.logBucket('pm_bucket.create', { id: bucketId, name })
   }
 
-  // ELO-2154: salva o novo nome da coluna e limpa o modo de edição.
+  // Salva o novo nome da coluna e limpa o modo de edição.
   // Usa commitInProgressRef para evitar duplo-save quando blur dispara após Enter.
   async function handleRenameBucket(bucketId: string, newName: string) {
     const bucket = buckets.find((b) => b.id === bucketId)
@@ -775,13 +917,13 @@ export function KanbanBoardPage() {
     })
   }
 
-  /** Captura o bucket original antes de qualquer optimistic update. ELO-2153. */
+  /** Captura o bucket original antes de qualquer optimistic update. */
   function handleDragStart(event: DragStartEvent) {
     if (event.active.data.current?.type === 'task') {
       const bucketId = event.active.data.current.bucketId as string
       originalBucketRef.current = bucketId
       activeBucketRef.current = bucketId
-      // ELO-3182: guarda a tarefa arrastada para o `DragOverlay` (Pedagogia).
+      // Guarda a tarefa arrastada para o `DragOverlay` (Pedagogia).
       // Sem overlay, o card arrastado continua sendo o elemento DENTRO da
       // coluna, que tem `overflowY: auto` — por isso ele era CORTADO ao passar
       // para outra coluna. O overlay renderiza fora dessa caixa.
@@ -791,8 +933,8 @@ export function KanbanBoardPage() {
 
   /**
    * Preview cross-column otimista: move a tarefa no state local enquanto ela está
-   * sendo arrastada sobre outra coluna. Não faz escrita no Firestore — isso fica
-   * para handleUnifiedDragEnd. ELO-2153.
+   * sendo arrastada sobre outra coluna. Não persiste nada — isso fica
+   * para handleUnifiedDragEnd.
    */
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event
@@ -819,13 +961,13 @@ export function KanbanBoardPage() {
    * Handler unificado de dragEnd: distingue pelo active.data.current.type.
    * - type 'column' → reordena colunas horizontalmente (antigo handleColumnDragEnd)
    * - type 'task', mesmo bucket → reordena dentro da coluna (antigo handleDragEnd)
-   * - type 'task', bucket diferente → persiste cross-column move no Firestore (ELO-2153)
-   * ELO-2153.
+   * - type 'task', bucket diferente → persiste o move cross-column
+   *.
    */
   async function handleUnifiedDragEnd(event: DragEndEvent) {
     const { active, over } = event
     const activeType = active.data.current?.type as string | undefined
-    // ELO-3182: limpa o overlay SEMPRE, logo no início — inclusive nos vários
+    // Limpa o overlay SEMPRE, logo no início — inclusive nos vários
     // early-returns abaixo. Se ficasse só no caminho feliz, um drop inválido
     // (soltar fora, soltar no mesmo lugar) deixaria o card fantasma preso na
     // tela.
@@ -870,8 +1012,8 @@ export function KanbanBoardPage() {
           )
           return
         }
-        // Persiste no Firestore passando o task com o bucketId original (antes do drag)
-        // para que moveTaskToBucket saiba de onde veio.
+        // Persiste passando o task com o bucketId original (antes do drag)
+        // Para que moveTaskToBucket saiba de onde veio.
         const taskToMove = tasks.find((t) => t.id === String(active.id))
         if (!taskToMove) return
         try {
@@ -907,9 +1049,8 @@ export function KanbanBoardPage() {
       // Se over for a coluna em si (não uma tarefa) ou tarefa não encontrada, abort
       if (!activeTask || !overTask) return
       // Bloqueia movimentação entre grupos de dueDate distintos — EXCETO em
-      // Pedagogia (ELO-3182), que usa ordenação manual pura estilo Trello
-      // (as tarefas importadas nunca têm `dueDate`, ver blindagem do painel
-      // de atrasos). Parametrizado por área: Marketing/Administrativo
+      // Pedagogia, que usa ordenação manual pura (as tarefas de lá
+      // normalmente não têm `dueDate`). Parametrizado por área: as demais
       // continuam com o bloqueio original, sem mudança de comportamento.
       if (area !== 'pedagogia' && getDueDateDay(activeTask) !== getDueDateDay(overTask)) return
       const currentIds = localTaskOrder[bucketId] ?? tasksByBucket[bucketId]?.map((t) => t.id) ?? []
@@ -930,9 +1071,9 @@ export function KanbanBoardPage() {
   }
 
   /**
-   * Clona uma tarefa (com subtarefas) para o bucket de destino. (ELO-2155)
+   * Clona uma tarefa (com subtarefas) para o bucket de destino.
    * Busca subtarefas antes de clonar e registra audit log `pm_task.clone`.
-   * Não precisa de optimistic update: a tarefa clonada aparece via listener do Firestore.
+   * Não precisa de optimistic update: a tarefa clonada aparece pelo próprio listener do store.
    */
   async function handleCloneTask(task: PMTask, targetBucketId: string) {
     if (!projectId) return
@@ -955,7 +1096,7 @@ export function KanbanBoardPage() {
   }
 
   /**
-   * Solicita confirmação e exclui uma tarefa via menu do card. (ELO-2155)
+   * Solicita confirmação e exclui uma tarefa via menu do card.
    * Fecha o TaskDetailModal se a tarefa excluída for a que está aberta.
    */
   async function handleConfirmDeleteTask() {
@@ -986,7 +1127,7 @@ export function KanbanBoardPage() {
   }
 
   /**
-   * Move uma tarefa para outro bucket via menu "Mover para" do card. (ELO-2153)
+   * Move uma tarefa para outro bucket via menu "Mover para" do card.
    * Aplica optimistic update imediato e reverte em caso de erro na escrita.
    * Mantido para coexistir com o drag-and-drop cross-column — ambos os mecanismos
    * chamam moveTaskToBucket mas por caminhos distintos.
@@ -994,7 +1135,7 @@ export function KanbanBoardPage() {
   async function handleMoveTask(task: PMTask, toBucketId: string) {
     if (!projectId || task.bucketId === toBucketId) return
     const fromBucketId = task.bucketId
-    // Optimistic update: reflete a mudança de coluna antes da confirmação do Firestore
+    // Optimistic update: reflete a mudança de coluna antes da confirmação da escrita
     setTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, bucketId: toBucketId } : t)),
     )
@@ -1020,10 +1161,10 @@ export function KanbanBoardPage() {
   }
 
   /**
-   * Arquiva/desarquiva uma tarefa via menu do card. (ELO-3182)
+   * Arquiva/desarquiva uma tarefa via menu do card.
    *
-   * Correção do gate ux-ui-reviewer (15/09/2026): o card sumindo/reaparecendo
-   * sem nenhum feedback era ambíguo com "excluiu" ou "deu erro silencioso" —
+   * O card sumindo/reaparecendo sem nenhum feedback é ambíguo com "excluiu"
+   * ou "deu erro silencioso" — por isso
    * `setArchiveToast` sempre confirma a ação, com "Desfazer" reaplicando a
    * transição oposta, e mostra erro em linguagem humana se a escrita falhar
    * (em vez de só `console.error`, que o usuário nunca vê).
@@ -1054,13 +1195,38 @@ export function KanbanBoardPage() {
     }
   }
 
-  // ELO-3182 (refinamento visual Pedagogia): fundo do quadro no tom do Trello,
-  // exclusivo desta área — Marketing/Administrativo continuam com `--eh-bg`
-  // (cinza neutro do CoreHUB). Ver `--eh-pm-board-*` em globals.css (dark
+  function handleSetColumnColor(bucketId: string, colorId: string) {
+    setColumnColors((prev) => {
+      // 'default' não fica guardado: some do mapa e volta a herdar o padrão.
+      const next = { ...prev }
+      if (colorId === 'default') delete next[bucketId]
+      else next[bucketId] = colorId
+      try {
+        localStorage.setItem(COLUMN_COLORS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // Sem storage: vale para esta sessão.
+      }
+      return next
+    })
+  }
+
+  async function handleRenameBoard(next: string) {
+    if (!next) return
+    setProjectTitle(next)
+    try {
+      localStorage.setItem(BOARD_TITLE_STORAGE_KEY, next)
+    } catch {
+      // Navegador sem storage disponível (aba privada, cookies bloqueados):
+      // o nome vale para esta sessão e volta ao padrão no reload.
+    }
+  }
+
+  // Fundo colorido do quadro, exclusivo desta área — as demais continuam com
+  // `--eh-bg` (cinza neutro). Ver `--eh-pm-board-*` em globals.css (dark
   // mode tem uma variante própria, mais escura, para não brigar com o tema).
   const isPedagogia = area === 'pedagogia'
 
-  // ELO-3182: Esc sai do modo ampliado — comportamento esperado por quem já
+  // Esc sai do modo ampliado — comportamento esperado por quem já
   // usou qualquer tela cheia. Gated por `isPedagogia && immersive`: nas
   // outras áreas `immersive` nunca fica `true` (nenhum botão pra ligá-lo),
   // então o listener não tem efeito nenhum lá mesmo que o hook rode sempre
@@ -1074,11 +1240,10 @@ export function KanbanBoardPage() {
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [isPedagogia, immersive, setImmersive])
 
-  // ELO-3182 (2ª rodada — "sobra espaço branco"): `AppLayout.tsx` é global
-  // (serve TODAS as telas do CoreHub) e aplica `px-6 py-6` (24px) + fundo
-  // `--eh-bg` no `<main>` que envolve QUALQUER página, incluindo esta —
-  // NÃO tocado aqui de propósito (mudar o `<main>` global vazaria pra
-  // Marketing/Administrativo/toda tela do app). Compensado só localmente,
+  // A casca do app (`AppShell.tsx`) é global e aplica 24px de padding + fundo
+  // `--eh-bg` no `<main>` que envolve QUALQUER página, incluindo esta — NÃO
+  // tocado aqui de propósito, porque mudar o `<main>` global vazaria pra toda
+  // tela do app. Compensado só localmente,
   // só quando `isPedagogia`, com margem negativa exatamente do tamanho do
   // padding do pai + crescimento equivalente em largura/altura — a técnica
   // padrão para "furar" o padding de um container ancestral sem alterá-lo.
@@ -1088,16 +1253,20 @@ export function KanbanBoardPage() {
   // "estourada" pela margem negativa ao scrollable content, mesmo sem
   // conteúdo real ali).
   const PEDAGOGIA_MAIN_PADDING_PX = 24
+  // `height: 100%` aqui media 100% do `<main>`, que é `overflow-y-auto`: quando
+  // um filtro reduz os cards, a base desse percentual encolhe junto com o
+  // conteúdo e o gradiente do quadro para de cobrir a viewport, expondo o cinza
+  // do body abaixo dele. Ancorar em `vh` tira o cálculo da cadeia do pai.
   const pageStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    height: isPedagogia ? `calc(100% + ${PEDAGOGIA_MAIN_PADDING_PX * 2}px)` : '100%',
+    height: isPedagogia ? '100vh' : '100%',
     minHeight: 0,
     width: isPedagogia ? `calc(100% + ${PEDAGOGIA_MAIN_PADDING_PX * 2}px)` : undefined,
     margin: isPedagogia ? `-${PEDAGOGIA_MAIN_PADDING_PX}px` : undefined,
     overflow: isPedagogia ? 'hidden' : undefined,
     background: isPedagogia ? 'var(--eh-pm-board-bg)' : 'var(--eh-bg, var(--eh-bg))',
-    // ELO-3182 (refinamento visual Pedagogia): `globals.css:150` aplica
+    // (refinamento visual Pedagogia): `globals.css:150` aplica
     // `font-family: var(--eh-font)` (Hanken Grotesk) no `body` — herdado por
     // TUDO por padrão. `font-family` é uma propriedade herdável, e um style
     // INLINE (especificidade sempre maior que qualquer seletor de classe/
@@ -1119,34 +1288,11 @@ export function KanbanBoardPage() {
     alignItems: isMobile ? 'stretch' : 'center',
     flexDirection: isMobile ? 'column' : 'row',
     justifyContent: 'space-between',
-    // Refinamento visual Pedagogia (ELO-3182, pedido do Marcos: "a barra
-    // corta a tela em duas... no Trello ela é fundida com o quadro"):
-    // altura ~48px medida na captura real (desktop, não-mobile — no mobile
-    // o padding empilhado naturalmente já muda a altura).
+    // Barra fundida com o quadro (fundo translúcido, sem borda inferior) em
+    // vez de uma faixa sólida que corta a tela em duas. Altura ~48px no
+    // desktop; no mobile o padding empilhado já muda a altura.
     padding: isMobile ? '12px 12px 10px' : isPedagogia ? '0 24px' : '16px 24px 12px',
     height: isMobile || !isPedagogia ? undefined : 48,
-    // NÃO é hex chapado: `pageStyle` (o container PAI) já pinta o mesmo
-    // `var(--eh-pm-board-bg)` (o gradiente inteiro) por baixo de header E
-    // board — aqui só uma camada preta translúcida por cima, então o
-    // gradiente do header continua o do board sem costura (é literalmente
-    // o mesmo gradiente, só com overlay).
-    //
-    // rgba(0,0,0,0.2) — RECALCULADO na 2ª rodada a partir de pixels reais do
-    // Trello (0,4 da 1ª rodada ficou "escuro demais", segundo o Marcos).
-    // Resolvendo `header = board*(1-alpha)` pelos 3 canais entre a barra
-    // real do Trello e o fundo do quadro logo abaixo dela: alpha ≈ 0,18–0,23
-    // — bate com a estimativa do Marcos (~0,18).
-    //
-    // O "pior caso" de contraste NÃO é a ponta mais clara do gradiente
-    // inteiro (#5fc5d0, canto inferior-direito do board) — o header é uma
-    // faixa de 48px no TOPO, e um gradiente 135deg nunca alcança sua própria
-    // extremidade dentro dessa faixa (geometria do ângulo). Calculado via
-    // projeção do gradiente CSS real sobre a faixa do header em larguras de
-    // até 2560px: o ponto mais claro que o header de fato cobre é ~#48ada5,
-    // não #5fc5d0. Nesse ponto real: alpha 0,18 dá 4,41:1 (reprova por
-    // pouco), alpha 0,2 dá 4,59:1 (passa, margem mínima sobre 4,5:1) — por
-    // isso 0,2 e não 0,18 cravado. Mesmo valor no modo escuro (base já mais
-    // escura, folga bem maior: 10,25:1 no pior caso equivalente).
     background: isPedagogia ? 'rgba(0,0,0,0.2)' : 'var(--eh-surface)',
     borderBottom: isPedagogia ? 'none' : '1px solid var(--eh-border, var(--eh-border))',
     flexShrink: 0,
@@ -1160,17 +1306,14 @@ export function KanbanBoardPage() {
     // sinaliza que o quadro rola para o lado. A rolagem horizontal é mantida
     // de propósito: é como Kanban funciona no mobile, e é o que preserva o
     // drag-and-drop entre colunas.
-    // Refinamento visual Pedagogia (desktop): 272px é a largura útil medida
-    // na captura real do board (1440×900) — mais estreita que os 340px do
-    // CoreHUB, resultando em colunas mais compactas/densas, como o Trello.
-    // Mobile continua 85vw para as três áreas (decisão de UX do CoreHUB, não
-    // informada pela captura desktop do Trello).
+    // Pedagogia (desktop): 272px, mais estreita que os 340px das demais
+    // áreas — colunas mais compactas cabem mais cards na tela.
+    // Mobile continua 85vw em todas as áreas.
     width: isMobile ? '85vw' : isPedagogia ? 272 : 340,
     flexShrink: 0,
     background: isPedagogia ? 'var(--eh-pm-board-column-bg)' : 'var(--eh-bg)',
     borderRadius: 12,
-    // Refinamento visual Pedagogia: sombra dupla medida por computed style
-    // da coluna real do Trello (mesmo valor do card, ver MarketingKanbanCard).
+    // Sombra dupla, mesmo valor usado no card (ver MarketingKanbanCard).
     ...(isPedagogia ? { boxShadow: '0 1px 1px 0 rgba(30,31,33,0.25), 0 0 1px 0 rgba(30,31,33,0.31)' } : {}),
     display: 'flex',
     flexDirection: 'column',
@@ -1185,15 +1328,21 @@ export function KanbanBoardPage() {
     flexShrink: 0,
   }
 
+  // O texto era `--eh-text-2` e a borda `--eh-border-hover`, os dois pensados
+  // Para o cinza-claro fixo da coluna. Medido contra os fundos de
+  // `COLUMN_COLORS`: o texto ficava entre 3,6:1 e 4,4:1 (reprovava AA em TODOS,
+  // inclusive no padrão) e a borda entre 1,1:1 e 1,3:1 — invisível. `text-3`
+  // sobe o texto para 5,8:1–7,1:1; a borda passa a ser preto translúcido, que
+  // acompanha qualquer fundo em vez de assumir um.
   const addTaskBtnStyle: CSSProperties = {
     width: '100%',
     padding: '7px 12px',
     background: 'transparent',
-    border: '1px dashed var(--eh-border-hover)',
+    border: '1px dashed rgba(0, 0, 0, 0.22)',
     borderRadius: 8,
     cursor: 'pointer',
     fontSize: 12.5,
-    color: 'var(--eh-text-2)',
+    color: 'var(--eh-text-3)',
     display: 'flex',
     alignItems: 'center',
     gap: 5,
@@ -1221,20 +1370,73 @@ export function KanbanBoardPage() {
     <div style={pageStyle}>
       {/* HEADER */}
       <div style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Pedagogia: branco sobre o overlay escuro do header (~16px/600,
-              medido na captura real do Trello) — 4,59:1 no pior caso REAL do
-              gradiente (mesmo cálculo do headerStyle acima). Outras áreas
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobile ? 'wrap' : undefined, minWidth: 0, flexShrink: 0 }}>
+          {/* Pedagogia: branco sobre o overlay escuro do header (~16px/600)
+              — 4,59:1 no pior caso REAL do gradiente (mesmo cálculo do
+              headerStyle acima). Outras áreas
               mantêm --eh-text-strong sobre --eh-surface branco, inalterado. */}
-          <h1 style={{ margin: 0, fontSize: isPedagogia ? 16 : 17, fontWeight: isPedagogia ? 600 : 700, color: isPedagogia ? 'var(--eh-pm-header-fg)' : 'var(--eh-text-strong)' }}>
-            {projectTitle}
+          <h1 style={{ margin: 0 }}>
+            <InlineEditableText
+              value={projectTitle}
+              onSave={handleRenameBoard}
+              ariaLabel="nome do quadro"
+              placeholder="Nome do quadro"
+              fontSize={isPedagogia ? 16 : 17}
+              fontWeight={isPedagogia ? 600 : 700}
+              color={isPedagogia ? 'var(--eh-pm-header-fg)' : 'var(--eh-text-strong)'}
+              editingColor="var(--eh-text-strong)"
+              disabled={!canWrite}
+            />
           </h1>
+          {/* Filtros à ESQUERDA, colados no título e separados das abas de
+              navegação (à direita) por um vão elástico — são coisas de
+              natureza diferente: estes recortam o que o quadro mostra, as
+              abas trocam de tela. */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              flexWrap: isMobile ? 'wrap' : undefined,
+              // No mobile os filtros caem para a linha de baixo — aí a barra
+              // vertical separaria de nada.
+              marginLeft: isMobile ? 0 : 8,
+              paddingLeft: isMobile ? 0 : 12,
+              borderLeft: isMobile
+                ? undefined
+                : isPedagogia
+                  ? '1px solid var(--eh-pm-header-border)'
+                  : '1px solid var(--eh-border)',
+            }}
+          >
+            <LabelFilterDropdown labels={labels} selected={labelFilter} onChange={setLabelFilter} pedagogia={isPedagogia} />
+            <AssigneeFilterDropdown
+              users={teamUsers}
+              selected={assigneeFilter}
+              onChange={setAssigneeFilter}
+              pedagogia={isPedagogia}
+            />
+            <StatusFilterDropdown
+              options={STATUS_OPTIONS}
+              selected={statusFilter}
+              onChange={setStatusFilter}
+              pedagogia={isPedagogia}
+            />
+            <SortDropdown
+              options={SORT_OPTIONS}
+              value={sortBy}
+              onChange={(v) => setSortBy(v as SortOption)}
+              pedagogia={isPedagogia}
+            />
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobile ? 'wrap' : undefined }}>
-          {/* busca de 280px fixos não cabe ao lado do título + 4 abas em 390px */}
-          <div style={{ position: 'relative', width: isMobile ? '100%' : 280 }}>
-            {/* Pedagogia: sem ícone (pedido do Marcos — "tire o ícone",
-                busca minimalista). O emoji 🔍 continua nas outras áreas,
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobile ? 'wrap' : undefined, minWidth: 0 }}>
+          {/* busca de 280px fixos não cabe ao lado do título + 4 abas em 390px.
+              No desktop os 280px são um TETO, não largura fixa: com os filtros
+              à esquerda, largura cravada fazia a busca invadir o "Ordenar" em
+              telas estreitas em vez de encolher. */}
+          <div style={{ position: 'relative', width: isMobile ? '100%' : undefined, flex: isMobile ? undefined : '1 1 auto', maxWidth: isMobile ? undefined : 280, minWidth: isMobile ? undefined : 120 }}>
+            {/* Pedagogia: busca minimalista, sem ícone. O emoji 🔍 continua nas outras áreas,
                 onde o campo é claro e o ícone ajuda a identificar o controle. */}
             {!isPedagogia && (
               <span
@@ -1252,7 +1454,7 @@ export function KanbanBoardPage() {
               </span>
             )}
             {/* Pedagogia: campo branco translúcido sobre o header escuro —
-                fundo/borda/texto/placeholder brancos, como o Trello real.
+                fundo/borda/texto/placeholder brancos.
                 Placeholder via className (`::placeholder` não dá pra
                 declarar inline) — ver globals.css. */}
             <input
@@ -1304,10 +1506,9 @@ export function KanbanBoardPage() {
               </button>
             )}
           </div>
-          {/* ELO-3182: dropdown só aparece quando o projeto tem alguma etiqueta
+          {/* Dropdown só aparece quando o projeto tem alguma etiqueta
               gravada — Marketing/Administrativo hoje não têm, então este bloco
               não aparece lá (comportamento visual inalterado). */}
-          <LabelFilterDropdown labels={labels} selected={labelFilter} onChange={setLabelFilter} pedagogia={isPedagogia} />
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
@@ -1343,14 +1544,13 @@ export function KanbanBoardPage() {
           </button>
           <div style={{ display: 'flex', gap: 4, overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? 2 : undefined }}>
             <NavButton label="Quadro" active={true} onClick={() => undefined} pedagogia={isPedagogia} />
-            <NavButton label="Grade" active={false} onClick={() => navigate(`${navBase}/grade`)} pedagogia={isPedagogia} />
             <NavButton label="Calendário" active={false} onClick={() => navigate(`${navBase}/calendario`)} pedagogia={isPedagogia} />
             <NavButton label="Equipe" active={false} onClick={() => setTeamModalOpen(true)} pedagogia={isPedagogia} />
             {canSeeTemplates && (
               <NavButton label="Templates" active={false} onClick={() => navigate(`${navBase}/templates`)} pedagogia={isPedagogia} />
             )}
           </div>
-          {/* ELO-3182: botão de ampliar — "ícone para ampliar e preencher a
+          {/* Botão de ampliar — "ícone para ampliar e preencher a
               tela toda desse kanban, e sair a lateral das abas". Só desktop
               (a sidebar no mobile já é um drawer que se fecha sozinho, sem
               ocupar espaço permanente — não há "lateral" competindo com o
@@ -1396,8 +1596,8 @@ export function KanbanBoardPage() {
         </div>
       </div>
 
-      {/* ELO-3182 (correção ux-ui-reviewer): estado vazio explícito — sem
-          isso, ligar o toggle num quadro sem arquivadas parecia botão quebrado. */}
+      {/* Estado vazio explícito — sem isso, ligar o toggle num quadro sem
+          nenhuma tarefa arquivada parece um botão quebrado. */}
       {showArchived && archivedCount === 0 && (
         <div
           style={{
@@ -1415,29 +1615,28 @@ export function KanbanBoardPage() {
 
       {/* BOARD */}
       <div
+        className={isPedagogia ? 'eh-pm-board-scroll' : undefined}
         style={{
           flex: 1,
           overflowX: 'auto',
           overflowY: 'hidden',
           padding: isMobile || isPedagogia ? '12px 12px' : '16px 20px',
           display: 'flex',
-          // Refinamento visual Pedagogia (desktop): gap entre colunas mais
-          // apertado, proporcional às colunas mais estreitas (272px) — Trello
-          // empacota as listas mais densamente que o board padrão do CoreHUB.
+          // Pedagogia (desktop): gap entre colunas mais apertado, proporcional
+          // às colunas mais estreitas (272px).
           gap: isMobile ? 10 : isPedagogia ? 8 : 12,
           alignItems: 'flex-start',
         }}
       >
         {/* DndContext único: gerencia tanto reordenação de colunas (horizontal)
-            quanto reordenação e cross-column de tarefas (vertical). ELO-2153. */}
+            quanto reordenação e cross-column de tarefas (vertical). */}
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
-          // ELO-3182: sem `measuring` explícito, o dnd-kit mede os retângulos
-          // dos itens só uma vez, ao iniciar o arrasto. Numa coluna de 454
-          // cards que rola durante o próprio arrasto, essas medidas ficam
-          // defasadas e o card "pula" para posições erradas — parte dos "muitos
-          // bugs" que o Marcos relatou. `Always` remede a cada frame do arrasto,
+          collisionDetection={collisionDetectionByType}
+          // Sem `measuring` explícito, o dnd-kit mede os retângulos dos itens
+          // só uma vez, ao iniciar o arrasto. Numa coluna longa que rola
+          // durante o próprio arrasto, essas medidas ficam defasadas e o card
+          // "pula" para posições erradas. `Always` remede a cada frame,
           // mantendo as posições corretas enquanto a lista rola.
           measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={canWrite ? handleDragStart : undefined}
@@ -1453,10 +1652,18 @@ export function KanbanBoardPage() {
           >
             {orderedBuckets.map((bucket, colIndex) => {
               const accentColor = COLUMN_ACCENT_COLORS[colIndex % COLUMN_ACCENT_COLORS.length]
+              const customColumnBg = COLUMN_COLORS.find((c) => c.id === columnColors[bucket.id])?.bg
               const bucketTasks = tasksByBucket[bucket.id] ?? []
               const doneTasks = doneTasksByBucket[bucket.id] ?? []
               const isDoneExpanded = expandedDoneBuckets.has(bucket.id)
-              const orderedIds = localTaskOrder[bucket.id] ?? bucketTasks.map((t) => t.id)
+              // Uma ordenação escolhida no cabeçalho ignora `localTaskOrder`
+              // (a ordem manual do arrasto) enquanto está ativa — voltar para
+              // "Ordem manual" devolve a ordem arrastada, que continua
+              // guardada intacta.
+              const orderedIds =
+                sortBy === 'manual'
+                  ? localTaskOrder[bucket.id] ?? bucketTasks.map((t) => t.id)
+                  : sortTasks(bucketTasks, sortBy).map((t) => t.id)
               const taskById = Object.fromEntries(bucketTasks.map((t) => [t.id, t]))
               // Mesmo raciocínio de `allBucketsForCard` acima, mas
               // por coluna (exclui a própria) — 1 array por coluna por
@@ -1468,14 +1675,18 @@ export function KanbanBoardPage() {
                 <SortableColumn
                   key={bucket.id}
                   id={bucket.id}
-                  // Refinamento visual Pedagogia: sem faixa colorida no topo da
-                  // coluna — o Trello não tem esse indicador, e a cor de accent
-                  // por coluna perde sentido no fundo colorido do board.
-                  outerStyle={isPedagogia ? columnStyle : { ...columnStyle, borderTop: `4px solid ${accentColor}` }}
+                  // Pedagogia: sem faixa colorida no topo da coluna — a cor de
+                  // accent por coluna perde sentido sobre o fundo colorido do
+                  // quadro.
+                  outerStyle={{
+                    ...columnStyle,
+                    ...(isPedagogia ? {} : { borderTop: `4px solid ${accentColor}` }),
+                    ...(customColumnBg ? { background: customColumnBg } : {}),
+                  }}
                   headerContent={
                     <div style={colHeaderStyle}>
                       {editingBucketId === bucket.id ? (
-                        /* Modo de renomeação inline (ELO-2154) */
+                        /* Modo de renomeação inline */
                         <div style={{ flex: 1, marginRight: 4 }}>
                           <input
                             ref={editingInputRef}
@@ -1521,15 +1732,12 @@ export function KanbanBoardPage() {
                         <>
                           <span
                             style={{
-                              // Refinamento visual Pedagogia. CORREÇÃO: a primeira
-                              // medição pegou `fontSize: 20` de um WRAPPER de layout
-                              // do Trello, não do texto — na tela ficou visivelmente
-                              // maior que o original e ainda cortava o nome. Medido de
-                              // novo, agora pela ALTURA DE GLIFO na captura real
-                              // (varredura de pixels escuros): 16px de altura de letra
-                              // ⇒ `font-size` ~14px. O Trello também QUEBRA o nome em
-                              // duas linhas ("FINALIZADOS-/APRESENTAÇÕES") em vez de
-                              // truncar com reticências.
+                              // 14px vem da ALTURA DE GLIFO pretendida (~16px de
+                              // altura de letra), não da altura de um wrapper de
+                              // layout: medir o wrapper dava 20px e deixava o nome
+                              // grande demais, cortando no cabeçalho. O nome também
+                              // QUEBRA em duas linhas em vez de truncar com
+                              // reticências.
                               fontSize: isPedagogia ? 14 : 13,
                               fontWeight: isPedagogia ? 600 : 600,
                               lineHeight: isPedagogia ? '20px' : undefined,
@@ -1538,7 +1746,7 @@ export function KanbanBoardPage() {
                                 : undefined,
                               color: isPedagogia ? 'var(--eh-pm-board-column-header-fg)' : 'var(--eh-text-3)',
                               flex: 1,
-                              // Pedagogia: quebra em 2 linhas como o Trello, sem cortar.
+                              // Pedagogia: quebra em 2 linhas, sem cortar.
                               overflow: isPedagogia ? undefined : 'hidden',
                               textOverflow: isPedagogia ? undefined : 'ellipsis',
                               whiteSpace: isPedagogia ? 'normal' : 'nowrap',
@@ -1549,8 +1757,8 @@ export function KanbanBoardPage() {
                           <span
                             style={{
                               marginLeft: 8,
-                              // Mesma correção do nome: 16 era derivado do wrapper.
-                              // No Trello a contagem é discreta, menor que o nome.
+                              // Mesma correção do nome: 16 vinha do wrapper. A
+                              // contagem é discreta, menor que o nome.
                               fontSize: isPedagogia ? 12 : 11.5,
                               fontWeight: isPedagogia ? 500 : 700,
                               color: isPedagogia ? 'var(--eh-pm-board-column-header-fg)' : 'var(--eh-muted-2)',
@@ -1579,6 +1787,10 @@ export function KanbanBoardPage() {
                                 }
                               }}
                               onPointerDown={(e) => e.stopPropagation()}
+                              // Hover em CSS (ver `.eh-pm-col-menu-btn`), não em
+                              // `onMouseEnter` mutando o style inline: o cinza fixo
+                              // de antes destoava assim que a coluna ganhava cor.
+                              className="eh-pm-col-menu-btn"
                               style={{
                                 flexShrink: 0, marginLeft: 6, padding: '2px 6px',
                                 border: 'none', background: 'transparent',
@@ -1586,8 +1798,6 @@ export function KanbanBoardPage() {
                                 display: 'flex', alignItems: 'center', borderRadius: 5,
                                 fontSize: 15, letterSpacing: 2, lineHeight: 1,
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--eh-border)' }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                             >
                               ⋯
                             </button>
@@ -1597,8 +1807,8 @@ export function KanbanBoardPage() {
                     </div>
                   }
                 >
-                  {/* TASK LIST — SortableContext por coluna dentro do DndContext único. ELO-2153. */}
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 8px' }}>
+                  {/* TASK LIST — SortableContext por coluna dentro do DndContext único. */}
+                  <div className="eh-pm-task-list" style={{ flex: 1, overflowY: 'auto', padding: '0 12px 8px' }}>
                     <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
                       {orderedTasks.map((task) => (
                         <MarketingKanbanCard
@@ -1624,13 +1834,12 @@ export function KanbanBoardPage() {
                       ))}
                     </SortableContext>
 
-                    {/* SEÇÃO TAREFAS CONCLUÍDAS — Marketing/Administrativo apenas.
-                        Decisão explícita do Marcos (ELO-3182): a Pedagogia NÃO tem
-                        seção colapsável, como o Trello real — `doneTasks` já é
-                        sempre [] aqui para 'pedagogia' (doneTasksByBucket retorna
-                        {} nessa área), então este bloco nunca renderiza lá. Guarda
-                        redundante em `area !== 'pedagogia'` deixa a intenção
-                        explícita em vez de depender só do array vazio. */}
+                    {/* SEÇÃO TAREFAS CONCLUÍDAS — não existe na Pedagogia, que
+                        deixa todo card solto na coluna. `doneTasks` já é sempre
+                        [] ali (doneTasksByBucket retorna {} nessa área), então
+                        este bloco nunca renderiza lá; a guarda redundante em
+                        `area !== 'pedagogia'` deixa a intenção explícita em vez
+                        de depender só do array vazio. */}
                     {area !== 'pedagogia' && doneTasks.length > 0 && (
                       <div
                         style={{
@@ -1705,13 +1914,13 @@ export function KanbanBoardPage() {
             })}
           </SortableContext>
 
-          {/* ELO-3182 (Pedagogia): o card arrastado é renderizado AQUI, fora
+          {/* (Pedagogia): o card arrastado é renderizado AQUI, fora
               das colunas, num portal do próprio dnd-kit. Antes ele era o
               elemento dentro da coluna — que tem `overflowY: auto` —, então
-              aparecia CORTADO ao passar para outra coluna (relato do Marcos).
+              aparecia CORTADO ao passar para outra coluna.
               O overlay também elimina a travada ao arrastar para cima/baixo:
               o elemento flutuante não participa do layout da lista, então
-              mover não força recálculo de posição dos 454 vizinhos.
+              mover não força recálculo de posição de todos os vizinhos.
 
               Marketing/Administrativo continuam sem overlay (comportamento
               anterior intacto) — `activeDragTask` só é preenchido quando
@@ -1720,9 +1929,8 @@ export function KanbanBoardPage() {
             {isPedagogia && activeDragTask ? (
               <div
                 style={{
-                  // Mesma linguagem visual do card "na mão" que o Marcos
-                  // aprovou ("gostei do jeito que ele se locomove"), agora
-                  // sem depender do elemento original.
+                  // Mesma linguagem visual do card "na mão", agora sem depender
+                  // do elemento original.
                   transform: 'rotate(3deg)',
                   boxShadow: '0 12px 24px -6px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)',
                   borderRadius: 8,
@@ -1794,10 +2002,9 @@ export function KanbanBoardPage() {
           ) : (
             <button
               onClick={() => setAddingBucket(true)}
-              // Pedagogia: branco translúcido sobre o gradiente, como o
-              // Trello real (captura enviada pelo Marcos). O `#62B09B` que ele
-              // identificou é o RESULTADO da sobreposição naquele ponto, não
-              // uma cor chapada: resolvendo `resultado = fundo(1-α) + 255α`
+              // Pedagogia: branco translúcido sobre o gradiente. O `#62B09B`
+              // que se enxerga na tela é o RESULTADO da sobreposição naquele
+              // ponto, não uma cor chapada: resolvendo `resultado = fundo(1-α) + 255α`
               // contra o fundo medido ali (#2e9376) dá α ≈ 0,26 por canal
               // (0,249 / 0,269 / 0,270). Por isso o botão acompanha o
               // gradiente em vez de destoar dele — e por isso `#62B09B`
@@ -1830,7 +2037,7 @@ export function KanbanBoardPage() {
         )}
       </div>
 
-      {/* DROPDOWN MENU DE OPÇÕES DE COLUNA (ELO-2154) — portal no body para não ser cortado pelo overflow */}
+      {/* DROPDOWN MENU DE OPÇÕES DE COLUNA — portal no body para não ser cortado pelo overflow */}
       {openMenuBucketId && menuAnchorRect && createPortal(
         <div
           ref={menuDropdownRef}
@@ -1838,8 +2045,8 @@ export function KanbanBoardPage() {
           style={{
             position: 'fixed',
             top: menuAnchorRect.bottom + 4,
-            left: menuAnchorRect.right - 168,
-            width: 168,
+            left: menuAnchorRect.right - 196,
+            width: 196,
             background: 'var(--eh-surface)',
             border: '1px solid var(--eh-border)',
             borderRadius: 8,
@@ -1882,6 +2089,35 @@ export function KanbanBoardPage() {
             </svg>
             Editar
           </button>
+          <div style={{ height: 1, background: 'var(--eh-border)', margin: '0 8px' }} />
+          <div style={{ padding: '8px 14px 10px' }}>
+            <div style={{ fontSize: 11.5, color: 'var(--eh-text-3)', marginBottom: 7 }}>Cor da coluna</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {COLUMN_COLORS.map((color) => {
+                const active = (columnColors[openMenuBucketId] ?? 'default') === color.id
+                return (
+                  <button
+                    key={color.id}
+                    type="button"
+                    title={color.label}
+                    aria-label={color.label}
+                    aria-pressed={active}
+                    onClick={() => handleSetColumnColor(openMenuBucketId, color.id)}
+                    style={{
+                      height: 26,
+                      borderRadius: 5,
+                      background: color.bg,
+                      cursor: 'pointer',
+                      // A cor selecionada ganha um anel escuro; as demais uma
+                      // borda fina, sem a qual os tons claros se perdem no
+                      // fundo branco do menu.
+                      border: active ? '2px solid var(--eh-text)' : '1px solid var(--eh-border-input)',
+                    }}
+                  />
+                )
+              })}
+            </div>
+          </div>
           <div style={{ height: 1, background: 'var(--eh-border)', margin: '0 8px' }} />
           <button
             type="button"
@@ -1930,7 +2166,7 @@ export function KanbanBoardPage() {
         />
       )}
 
-      {/* TOAST — arquivar/desarquivar tarefa (ELO-3182) */}
+      {/* TOAST — arquivar/desarquivar tarefa */}
       {archiveToast && (
         <ActionToast
           message={archiveToast.message}
@@ -1948,9 +2184,9 @@ export function KanbanBoardPage() {
         users={teamUsers}
         showRecurrence
         readOnly={!canWrite}
-        // ELO-3182 (refinamento visual): área + nome do bucket + dicionário de
+        // (refinamento visual): área + nome do bucket + dicionário de
         // etiquetas repassados só para trocar a hierarquia visual do cabeçalho
-        // estilo Trello quando area==='pedagogia' — nas demais áreas o modal
+        // em modo "documento" quando area==='pedagogia' — nas demais áreas o modal
         // ignora bucketName/labelsById e renderiza exatamente como hoje.
         area={area}
         bucketName={expandedTask ? bucketMap[expandedTask.bucketId] : undefined}
@@ -1960,7 +2196,7 @@ export function KanbanBoardPage() {
         onSave={(updated) => {
           const previous = tasks.find((t) => t.id === updated.id)
           setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
-          // ELO-2044: concluir/desmarcar sao acoes distintas de "editar" no log.
+          // Concluir/desmarcar sao acoes distintas de "editar" no log.
           // Sao as que o usuario mais faz, e chamar as tres de "editou uma
           // tarefa" esconderia exatamente o que se quer auditar.
           const wasDone = previous?.status === 'done'
@@ -2119,7 +2355,7 @@ export function KanbanBoardPage() {
         />
       )}
 
-      {/* MODAL CONFIRMAÇÃO DE EXCLUSÃO DE TAREFA (ELO-2155) */}
+      {/* MODAL CONFIRMAÇÃO DE EXCLUSÃO DE TAREFA */}
       {deleteTaskTarget && (
         <DeleteConfirmModal
           title="Excluir tarefa?"

@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * Campo de texto "documento" (ELO-3182, refinamento visual Pedagogia) —
+ * Campo de texto em modo "documento" —
  * fora do modo de edição mostra texto puro (sem rótulo de campo, sem
  * borda); clicar abre um `<input>`/`<textarea>` inline; blur ou Enter
  * (Ctrl+Enter no multilinha) salva; Escape cancela sem gravar.
  *
- * Design deliberado pra evitar perda silenciosa de dado (risco levantado
- * explicitamente pelo Marcos — "salvar no blur sem botão Salvar" pode
- * gravar toda vez que o usuário clica fora):
+ * Design deliberado pra evitar perda silenciosa de dado — salvar no blur, sem
+ * botão "Salvar", corre o risco de gravar toda vez que o usuário clica fora:
  * - `onSave` só é chamado se o valor MUDOU de fato (`trim()` comparado ao
  *   valor original) — clicar e sair sem editar não dispara escrita.
  * - Erro de gravação fica visível (`saveError` local, banner vermelho
@@ -22,7 +21,7 @@ import { useEffect, useRef, useState } from 'react'
  * do fechamento — confirmado empiricamente (ordem de eventos do DOM é
  * garantida pela spec: blur do elemento anterior sempre roda antes do click
  * do novo alvo; testado com Playwright headless real, não só teoria). A
- * escrita no Firestore é iniciada e continua em voo mesmo após o modal
+ * escrita é iniciada e continua em voo mesmo após o modal
  * desmontar (promises não são canceladas por unmount). O único cenário não
  * coberto: a escrita FALHAR depois que o modal já fechou — o banner de erro
  * não tem onde aparecer (o componente já desmontou), sobra só o
@@ -44,6 +43,7 @@ export function InlineEditableText({
   ariaLabel,
   disabled = false,
   boxed = false,
+  editingColor,
 }: {
   value: string
   onSave: (next: string) => Promise<void>
@@ -55,16 +55,20 @@ export function InlineEditableText({
   color?: string
   minHeight?: number
   ariaLabel: string
+  /**
+   * Cor do texto enquanto edita. O `<input>` tem fundo claro (`bg-background`),
+   * então quem usa `color` claro — texto sobre um cabeçalho escuro, por
+   * exemplo — precisa de um tom escuro aqui, ou o que se digita fica branco
+   * no branco. Sem isto, herda `color`.
+   */
+  editingColor?: string
   /** Viewer (`readOnly`) — mostra o texto, mas clicar não abre edição. */
   disabled?: boolean
   /**
-   * ELO-3182 (refino, pedido do Marcos: "Descrição tem um bloquinho... o
-   * nosso é discreto demais, quase invisível até clicar"). `false` (default)
-   * preserva o comportamento original — texto puro em repouso, fundo só no
-   * hover — usado pelo título (não deve parecer um campo de formulário).
-   * `true` aplica fundo + borda JÁ NO REPOUSO, imitando a caixa do campo de
-   * Descrição do Trello: dá presença ao campo mesmo antes de clicar, em vez
-   * de ficar invisível até o hover.
+   * `false` (default): texto puro em repouso, fundo só no hover — usado pelo
+   * título, que não deve parecer um campo de formulário.
+   * `true`: fundo + borda JÁ NO REPOUSO. Dá presença ao campo (ex.: Descrição)
+   * antes de clicar, em vez de ele ficar praticamente invisível até o hover.
    */
   boxed?: boolean
 }) {
@@ -142,16 +146,15 @@ export function InlineEditableText({
           whiteSpace: multiline ? 'pre-wrap' : undefined,
           wordBreak: 'break-word',
           borderRadius: 4,
-          // `boxed`: fundo + borda JÁ NO REPOUSO (padding maior para a caixa
-          // não ficar apertada) — mede aproximadamente a caixa de Descrição
-          // do Trello (~90px de altura medidos em trello-3-modal.png).
-          // `!boxed` preserva byte a byte o comportamento anterior (usado
-          // pelo título): sem fundo/borda em repouso, padding compacto.
+          // `boxed`: fundo + borda JÁ NO REPOUSO, com padding maior para a
+          // caixa não ficar apertada (~90px de altura na Descrição).
+          // `!boxed`: sem fundo/borda em repouso, padding compacto — é o que
+          // o título usa.
           padding: boxed ? '10px 12px' : '2px 4px',
           margin: boxed ? 0 : '-2px -4px',
           background: boxed ? 'var(--eh-pm-neutral-surface)' : 'transparent',
-          // `--eh-muted-4`, NÃO `--eh-border`: medido explicitamente (gate de
-          // WCAG 1.4.11, contorno de componente ⩾3:1) — `--eh-border` contra
+          // `--eh-muted-4`, NÃO `--eh-border`: medido explicitamente contra o
+          // piso de WCAG 1.4.11 (contorno de componente ⩾3:1) — `--eh-border` contra
           // `--eh-pm-neutral-surface` mede só 1,13:1 no claro e a composição
           // equivalente no escuro mede 1,03:1, os dois MUITO abaixo do piso.
           // `--eh-muted-4` mede 3,29:1 (claro) e 4,93:1 (escuro) — token já
@@ -162,7 +165,7 @@ export function InlineEditableText({
         onMouseEnter={(e) => { if (!disabled && !boxed) e.currentTarget.style.background = 'var(--eh-pm-neutral-surface)' }}
         onMouseLeave={(e) => { if (!boxed) e.currentTarget.style.background = 'transparent' }}
       >
-        {/* ELO-3182 (refino visual, correção de contraste): era --eh-muted-2
+        {/* (refino visual, correção de contraste): era --eh-muted-2
             (2,42:1 sobre --eh-pm-neutral-surface, abaixo de AA — débito
             conhecido do token, ver docs internos) — trocado pra --eh-text-3
             (7,10:1 no claro / 7,37:1 no escuro), que já é o tom "cinza
@@ -184,7 +187,13 @@ export function InlineEditableText({
     disabled: saving,
     placeholder,
     className: 'w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring',
-    style: { ...textStyle, borderRadius: 4, resize: multiline ? ('vertical' as const) : undefined, minHeight: multiline ? minHeight : undefined },
+    style: {
+      ...textStyle,
+      color: editingColor ?? textStyle.color,
+      borderRadius: 4,
+      resize: multiline ? ('vertical' as const) : undefined,
+      minHeight: multiline ? minHeight : undefined,
+    },
   }
 
   return (

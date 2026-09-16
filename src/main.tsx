@@ -5,7 +5,6 @@ import './styles/globals.css'
 import { AuthProvider } from './providers/AuthProvider'
 import { AppShell } from './layouts/AppShell'
 import { KanbanBoardPage } from './features/kanban/KanbanBoardPage'
-import { MarketingGradePage } from './features/kanban/pages/MarketingGradePage'
 import { MarketingCalendarioPage } from './features/kanban/pages/MarketingCalendarioPage'
 import { MarketingTemplatesPage } from './features/kanban/pages/MarketingTemplatesPage'
 
@@ -16,7 +15,6 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/quadro" element={<KanbanBoardPage />} />
-            <Route path="/grade" element={<MarketingGradePage />} />
             <Route path="/calendario" element={<MarketingCalendarioPage />} />
             <Route path="/templates" element={<MarketingTemplatesPage />} />
             <Route path="*" element={<Navigate to="/quadro" replace />} />

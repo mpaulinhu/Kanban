@@ -8,9 +8,9 @@ import 'react-day-picker/dist/style.css'
 // Valores fixos porque getBoundingClientRect no popRef retorna 0 antes do
 // DayPicker concluir seu layout — não é possível medir antes do primeiro paint.
 // São apenas o CHUTE INICIAL: logo após o paint, `calcPos` passa a usar a
-// largura/altura reais medidas no popRef (ver ELO-2694).
+// largura/altura reais medidas no popRef.
 const CALENDAR_H = 450
-// ELO-2694: era 290, mas o calendário renderizado mede ~326px. A constante
+// Era 290, mas o calendário renderizado mede ~326px. A constante
 // defasada fazia o clamp de borda calcular com a largura errada e não impedir o
 // vazamento (medido: `right: 388` num viewport de 360 = 28px fora da tela).
 const CALENDAR_W = 326
@@ -22,11 +22,11 @@ const VIEWPORT_MARGIN = 8
 // containers (ex.: <main overflow-y-auto> do AppLayout). Registramos o listener
 // diretamente em cada elemento scrollável para garantir o disparo.
 //
-// ELO-2694: antes esta função retornava só o PRIMEIRO ancestral com
+// Antes esta função retornava só o PRIMEIRO ancestral com
 // `overflow-y: auto|scroll` e parava ali. No planner de Realidade Virtual o
 // primeiro é um <div> de ~1116px que NÃO rola (scrollHeight === clientHeight) —
 // quem rola é o <main> acima dele. O listener ia parar no elemento errado e o
-// reposicionamento da ELO-2182 nunca disparava, deixando o calendário "preso"
+// reposicionamento da nunca disparava, deixando o calendário "preso"
 // num ponto solto da tela. Agora ignoramos containers que não rolam de fato e
 // escutamos todos os que rolam, o que também cobre listas aninhadas.
 function getScrollableAncestors(el: Element | null): Element[] {
@@ -151,16 +151,14 @@ function CustomCaption({ displayMonth }: CaptionProps) {
 
 /**
  * Popup de calendário compartilhado entre todos os InlineDateCell do PM Office
- * (AudiovisualBucketPage, PlannerBucketTree) e o ModalDatePicker (TaskDetailModal).
+ * das páginas de quadro e o ModalDatePicker (TaskDetailModal).
  *
- * Inclui as 4 melhorias da ELO-2182:
- *   1. Scroll tracking — reposiciona acompanhando o botão âncora ao scrollar.
+ * Inclui as 4 melhorias da *   1. Scroll tracking — reposiciona acompanhando o botão âncora ao scrollar.
  *   2. Data inicial correta — abre no mês/ano da data existente ou no mês atual.
  *   3. Dia selecionado em evidência — destaca o dia da data existente no DayPicker.
  *   4. Input manual dd/mm/aaaa + selects de mês/ano no caption do calendário.
  *
- * ELO-2184:
- *   5. disabledBefore / disabledAfter — limites de range (início ≤ término).
+ * *   5. disabledBefore / disabledAfter — limites de range (início ≤ término).
  *
  * Montar apenas quando o popup deve estar visível; desmontar para fechar.
  */
@@ -188,9 +186,9 @@ export function InlineDateCellPopup({
    * pode ser o <main> da página, que não scrolla enquanto o modal está aberto.
    */
   scrollContainer?: HTMLElement | null
-  /** ELO-2184: desabilita dias anteriores a esta data no DayPicker e valida o input. */
+  /** Desabilita dias anteriores a esta data no DayPicker e valida o input. */
   disabledBefore?: Date
-  /** ELO-2184: desabilita dias posteriores a esta data no DayPicker e valida o input. */
+  /** Desabilita dias posteriores a esta data no DayPicker e valida o input. */
   disabledAfter?: Date
 }) {
   const popRef = useRef<HTMLDivElement>(null)
@@ -218,7 +216,7 @@ export function InlineDateCellPopup({
     const vw = document.documentElement.clientWidth
     const vh = window.innerHeight
 
-    // ELO-2694: usa as dimensões REAIS do popup assim que ele existe no DOM; as
+    // Usa as dimensões REAIS do popup assim que ele existe no DOM; as
     // constantes servem só para o primeiro cálculo, antes do primeiro paint.
     const popRect = popRef.current?.getBoundingClientRect()
     const w = Math.min(popRect?.width || CALENDAR_W, vw - VIEWPORT_MARGIN * 2)
@@ -236,7 +234,7 @@ export function InlineDateCellPopup({
     if (top + h + VIEWPORT_MARGIN > vh) {
       top = btnRect.top - h - GAP
     }
-    // ELO-2694: clampa nas DUAS pontas contra o viewport. Antes só havia o
+    // Clampa nas DUAS pontas contra o viewport. Antes só havia o
     // limite inferior (`top >= 8`), o que deixava passar um `top` positivo porém
     // fora da tela: com a âncora fora da área visível (lista longa rolada),
     // `btnRect.top` valia 1617 numa janela de 740 e o popup ia parar em ~1413 —
@@ -250,7 +248,7 @@ export function InlineDateCellPopup({
   }, [anchorRef])
 
   // Melhoria 1: posiciona antes do primeiro paint (sem flash).
-  // ELO-2694: o primeiro cálculo usa as constantes (o popup ainda não tem
+  // O primeiro cálculo usa as constantes (o popup ainda não tem
   // layout); o segundo, no rAF, já mede o elemento real e corrige a posição.
   useLayoutEffect(() => {
     setPos(calcPos())
@@ -279,7 +277,7 @@ export function InlineDateCellPopup({
     // modal), usa-o diretamente em vez de subir a árvore DOM — evita o caso em que
     // getScrollableAncestor para no <main> da página, que não scrolla enquanto o
     // modal está aberto.
-    // ELO-2694: escuta TODOS os ancestrais que rolam de fato (antes era só o
+    // Escuta TODOS os ancestrais que rolam de fato (antes era só o
     // primeiro com overflow:auto, que nesta tela nem rolava). `document` entra
     // sempre para cobrir a rolagem da própria página.
     const scrollTargets: EventTarget[] = scrollContainer !== undefined
@@ -307,7 +305,7 @@ export function InlineDateCellPopup({
   }
 
   // Melhoria 4: Enter confirma a data digitada; Esc fecha sem alterar.
-  // ELO-2184: rejeita silenciosamente datas fora do range disabledBefore/disabledAfter.
+  // Rejeita silenciosamente datas fora do range disabledBefore/disabledAfter.
   function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       const parsed = parsePtBR(inputRaw)
@@ -342,7 +340,7 @@ export function InlineDateCellPopup({
         left: pos.left,
         zIndex,
         maxHeight: maxH,
-        // ELO-2694: impede que o calendário fique mais largo que a tela. Só age
+        // Impede que o calendário fique mais largo que a tela. Só age
         // abaixo de ~342px de viewport; acima disso o popup mantém o tamanho
         // natural e o desktop não muda. `overflow: auto` garante que o conteúdo
         // continue alcançável se ele precisar encolher.
@@ -376,7 +374,7 @@ export function InlineDateCellPopup({
         />
       </div>
       {/* Melhorias 2 e 3: mês controlado (abre na data existente) e dia selecionado em evidência */}
-      {/* ELO-2184: disabled limita range de datas selecionáveis */}
+      {/* Disabled limita range de datas selecionáveis */}
       <DayPicker
         mode="single"
         month={displayMonth}

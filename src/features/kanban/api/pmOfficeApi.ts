@@ -1,7 +1,4 @@
-/**
- * Subconjunto do `pmOfficeApi` do CoreHub usado pela tela de quadro —
- * mesmas assinaturas, estado em memória (ver `store.ts`).
- */
+/** API do quadro: leitura e mutação das tarefas sobre o estado em memória (ver `store.ts`). */
 
 import type { PMTask } from '../types/pmOffice'
 import { getState, mergeIntoTask, mutate, tsNow } from './store'
@@ -14,20 +11,13 @@ export type PMTaskPatch = Partial<Pick<PMTask,
   'previousStatusBeforeAtrasado' |
   'labels' |
   'attachments' |
-  /**
-   * Divergência do original: lá `recurrence`/`checklist`/`checklistDone` ficam
-   * FORA de `PMTaskPatch` porque o `TaskDetailModal` os grava com `setDoc`/
-   * `updateDoc` crus (`recurrence` usa `deleteField()`, um `FieldValue` que o
-   * tipo não aceita). Sem Firestore não existe `FieldValue`, e o componente
-   * adaptado passa esses campos pelo próprio `updatePMTask` — então eles
-   * entram no patch. `recurrence: undefined` continua significando "remover".
-   */
+  /** `recurrence: undefined` significa "remover a recorrência", não "não mexer". */
   'recurrence' | 'checklist' | 'checklistDone'
 >>
 
 export async function updatePMProject(
   projectId: string,
-  data: { brands: ('elo-editora' | 'perabook')[] } | { team: string[] },
+  data: { team: string[] },
 ): Promise<void> {
   mutate((draft) => {
     if (draft.project.id !== projectId) return
@@ -49,9 +39,9 @@ export async function updatePMTask(
     if (!task) return
     mergeIntoTask(task, data)
     // `mergeIntoTask` ignora `undefined` (semântica de `{ merge: true }`), mas
-    // `recurrence: undefined` é como o modal pede a REMOÇÃO da recorrência —
-    // no original isso era `deleteField()`. A chave precisa estar presente no
-    // patch para diferenciar "remover" de "não mexer".
+    // `recurrence: undefined` é como o modal pede a REMOÇÃO da recorrência.
+    // A chave precisa estar presente no patch para diferenciar "remover" de
+    // "não mexer".
     if ('recurrence' in data && data.recurrence === undefined) {
       delete task.recurrence
     }

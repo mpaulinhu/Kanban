@@ -18,7 +18,7 @@ import { ChecklistSection } from './ChecklistSection'
 import { TaskComments } from './TaskComments'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
-/** Resolve a foto do usuário por nome exato (case-insensitive), só quando único. Mesmo critério de `PlannerBucketTree.findPhotoByName`. */
+/** Resolve a foto do usuário por nome exato (case-insensitive), só quando único — ambíguo não resolve. */
 function findPhotoByName(name: string, users: UserRecord[]): string | undefined {
   const target = name.trim().toLowerCase()
   const matches = users.filter((u) => u.name.trim().toLowerCase() === target)
@@ -40,7 +40,7 @@ const STATUS_OPTIONS: { value: PMTask['status']; label: string }[] = [
   { value: 'todo', label: 'A fazer' },
   { value: 'in_progress', label: 'Em andamento' },
   { value: 'done', label: 'Concluída' },
-  // ELO-3121: trocável manualmente a qualquer momento, igual aos outros 3 —
+  // Trocável manualmente a qualquer momento, igual aos outros 3 —
   // a escolha manual não é revertida sozinha depois (só a transição
   // AUTOMÁTICA/lazy tem reversão simétrica, ver `applyLazyOverdueTransition`).
   { value: 'atrasado', label: 'Atrasado' },
@@ -152,12 +152,11 @@ function ReadField({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Pílula de ação estilo Trello (ELO-3182, refinamento visual Pedagogia) —
+ * Pílula de ação do modo "documento" —
  * usada em `PedagogiaDocumentBody.tsx` (modo "documento" da Pedagogia,
  * importado de lá) e exportada daqui para não duplicar o componente. Só
  * para seções que JÁ existem no corpo (rola até lá) — nunca renderizada
- * para algo sem seção correspondente (Anexo, Checklist — sem dado
- * importado do Trello — e "+ Adicionar" genérico ficam de fora).
+ * para algo sem seção correspondente.
  */
 export function ActionPill({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
@@ -165,10 +164,9 @@ export function ActionPill({ icon, label, onClick }: { icon: ReactNode; label: s
       type="button"
       onClick={onClick}
       className="inline-flex items-center gap-1.5 transition-colors"
-      // ELO-3182 (correção de contraste, pedido do Marcos: "textos dos
-      // modais... o texto das pílulas"): era --eh-text-2 (4,36:1 sobre
-      // --eh-pm-neutral-surface — já abaixo de AA), trocado pra
-      // --eh-pm-modal-text (12,80:1).
+      // Correção de contraste: --eh-text-2 media 4,36:1 sobre
+      // --eh-pm-neutral-surface — abaixo do piso AA (4,5:1). Usa
+      // --eh-pm-modal-text, que mede 12,80:1.
       style={{
         background: 'var(--eh-pm-neutral-surface)',
         color: 'var(--eh-pm-modal-text)',
@@ -188,9 +186,9 @@ export function ActionPill({ icon, label, onClick }: { icon: ReactNode; label: s
   )
 }
 
-/* ─── ELO-2652: contagens do tamanho do livro (páginas / caracteres) ──────────
-   O módulo PM não usa Zod (valida imperativamente via `canSave`), então a
-   validação destes dois campos vive aqui, em funções puras. */
+/* ─── contagens de tamanho (páginas / caracteres) ──────────────────
+   A validação destes dois campos vive aqui, em funções puras, porque o
+   restante do modal valida imperativamente via `canSave`. */
 
 /** Aceita apenas inteiro ≥ 0. Rejeita decimal, negativo e texto. */
 function isContagemValida(raw: string): boolean {
@@ -203,24 +201,24 @@ function isContagemValida(raw: string): boolean {
 
 /**
  * String do input → valor a gravar. Campo vazio ou inválido vira `null` (limpa
- * o dado), nunca `NaN` ou `0` — um livro sem contagem não é um livro de zero
- * páginas, e a distinção importa para o aviso de "ainda não preenchido".
+ * o dado), nunca `NaN` ou `0` — "sem contagem" não é o mesmo que "zero
+ * páginas", e a distinção importa para o aviso de "ainda não preenchido".
  */
 function parseContagem(raw: string): number | null {
   return isContagemValida(raw) ? Number(raw.trim()) : null
 }
 
-// ELO-2182: posicionamento, scroll tracking, data inicial correta, dia em evidência,
+// Posicionamento, scroll tracking, data inicial correta, dia em evidência,
 // input dd/mm/aaaa e navegação por ano delegados ao InlineDateCellPopup compartilhado.
-// ELO-2184: props disabledBefore/disabledAfter repassadas ao InlineDateCellPopup.
+// Props disabledBefore/disabledAfter repassadas ao InlineDateCellPopup.
 export function ModalDatePicker({ label, value, onChange, scrollContainer, disabledBefore, disabledAfter }: {
   label: string
   value: Date | null
   onChange: (d: Date | null) => void
   scrollContainer?: HTMLElement | null
-  /** ELO-2184: desabilita dias anteriores a esta data. */
+  /** Desabilita dias anteriores a esta data. */
   disabledBefore?: Date
-  /** ELO-2184: desabilita dias posteriores a esta data. */
+  /** Desabilita dias posteriores a esta data. */
   disabledAfter?: Date
 }) {
   const [open, setOpen] = useState(false)
@@ -274,7 +272,7 @@ export function AssigneeSelect({ users, assignees, assigneesNames, onChange }: {
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
 
-  // ELO-2891: candidatos a responsável = só equipe interna. Filtro aqui e não
+  // Candidatos a responsável = só equipe interna. Filtro aqui e não
   // no `users` do modal: o mesmo array alimenta `findPhotoByName` (avatar de
   // quem JÁ está atribuído), que precisa continuar enxergando todo mundo.
   const selectableUsers = onlyInternalUsers(users)
@@ -419,27 +417,27 @@ export function TaskDetailModal({
   users?: UserRecord[]
   rawStatusOptions?: string[]
   showRecurrence?: boolean
-  /** ELO-1954: Viewer não pode salvar/excluir tarefa nem checklist — trava tudo pra leitura. */
+  /** Viewer não pode salvar/excluir tarefa nem checklist — trava tudo pra leitura. */
   readOnly?: boolean
-  /** ELO-2193: Bloqueia salvar quando status=done e dueDate está vazio. Passar true nas áreas Audiovisual, Editorial e Tecnologia. */
+  /** Bloqueia salvar quando status=done e dueDate está vazio. */
   requireDueDate?: boolean
-  /** ELO-2123: Duração do livro (bucket) em hh:mm:ss — só para Libras (Acessibilidade) e tarefa plana (Rádio Novela). */
+  /** Duração associada à coluna, em hh:mm:ss. */
   duracao?: string | null
-  /** ELO-2123: Callback para salvar a duração no bucket. Quando definido, o campo Duração é exibido. */
+  /** Callback para salvar a duração no bucket. Quando definido, o campo Duração é exibido. */
   onDuracaoSave?: (val: string | null) => Promise<void>
-  /** ELO-2122: Coleção do livro (bucket.categoryName) — tarefa pai em Acessibilidade e Rádio Novela. */
+  /** Coleção da coluna (bucket.categoryName). */
   colecao?: string | null
-  /** ELO-2122: Callback para salvar a coleção no bucket. Quando definido, o campo Coleção é exibido. */
+  /** Callback para salvar a coleção no bucket. Quando definido, o campo Coleção é exibido. */
   onColecaoSave?: (val: string | null) => Promise<void>
-  /** ELO-2652: Páginas do livro (bucket) — exibido em Áudio Descrição e Libras. */
+  /** Contagem de páginas associada à coluna. */
   paginas?: number | null
-  /** ELO-2652: Caracteres do livro (bucket) — exibido junto de {@link paginas}. */
+  /** Contagem de caracteres, exibida junto de {@link paginas}. */
   caracteres?: number | null
   /**
-   * ELO-2652: Callback para salvar o tamanho do livro no bucket. Quando definido,
-   * os campos Páginas/Caracteres são exibidos — mesmo mecanismo de `onDuracaoSave`,
-   * que é o que impede os campos de vazarem para Marketing/Tecnologia/Planner
-   * (este modal é compartilhado pelos quatro módulos).
+   * Callback para salvar as contagens na coluna. Quando definido, os campos
+   * Páginas/Caracteres aparecem — mesmo mecanismo de `onDuracaoSave`. É o que
+   * impede esses campos de vazarem para as áreas que não os usam, já que este
+   * modal é compartilhado.
    */
   onTamanhoLivroSave?: (val: { paginas: number | null; caracteres: number | null }) => Promise<void>
   onClose: () => void
@@ -452,19 +450,17 @@ export function TaskDetailModal({
   onRenameChecklistItem?: (itemId: string, newTitle: string) => Promise<void>
   onDeleteChecklistItem?: (itemId: string) => Promise<void>
   /**
-   * Área dona da tarefa (ELO-3182, refinamento visual) — usada só para trocar
-   * o layout/hierarquia visual do cabeçalho pelo desenho do Trello quando
-   * `'pedagogia'`. `undefined`/outras áreas preservam o modal atual sem
-   * nenhuma mudança de pixel (Marketing/Administrativo/Editorial/Tecnologia/
-   * Audiovisual não passam esta prop hoje).
+   * Área dona da tarefa — usada só para trocar o layout/hierarquia visual do
+   * cabeçalho para o modo "documento" quando `'pedagogia'`. `undefined`/outras
+   * áreas preservam o cabeçalho clássico.
    */
   area?: 'marketing' | 'administrativo' | 'pedagogia'
-  /** Nome da coluna (bucket) da tarefa — exibido como "chip" no cabeçalho estilo Trello (só Pedagogia). */
+  /** Nome da coluna (bucket) da tarefa — exibido como "chip" no cabeçalho do modo "documento" (só Pedagogia). */
   bucketName?: string
-  /** Dicionário de etiquetas do projeto — exibido na seção Etiquetas do cabeçalho estilo Trello (só Pedagogia). */
+  /** Dicionário de etiquetas do projeto — exibido na seção Etiquetas do cabeçalho do modo "documento" (só Pedagogia). */
   labelsById?: Map<string, PMOfficeLabel>
   /**
-   * Nome do PROJETO dono da tarefa (ELO-3183) — repassado ao `logPmAction`
+   * Nome do PROJETO dono da tarefa — repassado ao `logPmAction`
    * de `TaskComments`, mesmo campo desnormalizado que `usePmAudit`/
    * `PmAuditMetadata.projectName` já exigem em toda ação de PM Office (ver
    * `hooks/usePmAudit.ts`). Opcional porque só o fluxo de Comentários da
@@ -474,26 +470,12 @@ export function TaskDetailModal({
    */
   projectName?: string
 }) {
-  // ELO-3182: `'trello'` entra na lista porque as 601 tarefas importadas do
-  // quadro "Agenda Pedagogas" nascem com `source: 'trello'` — sem isso a área
-  // Pedagogia inteira subiria somente-leitura, e a equipe não conseguiria
-  // editar o próprio trabalho. A permissão real continua vindo de `readOnly`
-  // (papel do usuário via RBAC); esta lista só distingue origem de dado que o
-  // CoreHub controla de origem que é espelho de sistema externo vivo (o
-  // `clickup`, por exemplo, segue fora: lá a fonte da verdade é remota e
-  // editar aqui criaria divergência silenciosa). O Trello é importação ÚNICA,
-  // sem sincronização — depois do import, o CoreHub é a fonte da verdade.
-  const isEditable =
-    !readOnly &&
-    (task?.source === 'planner' ||
-      task?.source === 'graph' ||
-      task?.source === 'manual' ||
-      task?.source === 'trello')
+  const isEditable = !readOnly
   const readOnlyTitle = 'Somente leitura — perfil Viewer'
-  // Refinamento visual estilo Trello (ELO-3182), exclusivo da área Pedagogia
-  // — as demais áreas (undefined ou outro valor) mantêm o cabeçalho atual.
+  // Cabeçalho em estilo "documento", exclusivo da área Pedagogia — as demais
+  // áreas (undefined ou outro valor) mantêm o cabeçalho clássico.
   const isPedagogia = area === 'pedagogia'
-  // ELO-3182: overlay alinhado ao topo (em vez de centralizado) e padding-top
+  // Overlay alinhado ao topo (em vez de centralizado) e padding-top
   // reduzido no mobile — em telas baixas, `pt-[6vh]` somado a `max-h-[90vh]`
   // empurraria o rodapé do modal pra fora da viewport. Mesmo breakpoint
   // (640px) usado no resto do PM Office.
@@ -502,7 +484,7 @@ export function TaskDetailModal({
   // Ref para o container scrollável interno do modal — passado ao InlineDateCellPopup
   // para que o listener de scroll não vá parar no <main> da página.
   const scrollRef = useRef<HTMLDivElement>(null)
-  // ELO-3183: com a coluna de Comentários, o corpo do modo "documento" da
+  // Com a coluna de Comentários, o corpo do modo "documento" da
   // Pedagogia (isPedagogia && isEditable) vira DUAS colunas lado a lado —
   // `scrollRef` continua sendo o wrapper que separa cabeçalho/corpo/rodapé,
   // mas deixa de ser o container que de fato rola quando há duas colunas.
@@ -533,14 +515,14 @@ export function TaskDetailModal({
   const [avisoApi, setAvisoApi] = useState(false)
   const [localDuracao, setLocalDuracao] = useState(duracao ?? '')
   const [localColecao, setLocalColecao] = useState(colecao ?? '')
-  // ELO-2652 — mantidos como string porque é o que o <input> devolve; a conversão
+  // — mantidos como string porque é o que o <input> devolve; a conversão
   // para número (ou `null`, quando limpo) acontece só no save, via `parseContagem`.
   const [localPaginas, setLocalPaginas] = useState(paginas != null ? String(paginas) : '')
   const [localCaracteres, setLocalCaracteres] = useState(caracteres != null ? String(caracteres) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
-  // ELO-2978: falhas de exclusão passam a ser visíveis em vez de engolidas.
+  // Falhas de exclusão passam a ser visíveis em vez de engolidas.
   const [deleteTaskError, setDeleteTaskError] = useState<string | null>(null)
   const [deleteTaskLoading, setDeleteTaskLoading] = useState(false)
 
@@ -575,7 +557,7 @@ export function TaskDetailModal({
       setRecurrenceDays([])
     }
     setError('')
-    // ELO-2743: depende de task?.id, não da referência de `task`. O listener
+    // Depende de task?.id, não da referência de `task`. O listener
     // que alimenta este modal (subscribeMarketingTasks) escuta TODAS as tasks
     // do projeto — qualquer mudança em outra task gera um array/objeto `task`
     // novo aqui, mesmo com conteúdo idêntico. Depender da referência resetava
@@ -584,21 +566,19 @@ export function TaskDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task?.id, duracao, colecao, paginas, caracteres])
 
-  // ELO-3121 — gatilho automático (lazy) de "Atrasado": roda só quando ESTA
-  // tarefa específica é aberta (nunca varredura em lote). `isEditable` já
-  // restringe a `source` que o CoreHub de fato gerencia (planner/graph/
-  // manual) — tarefas 'linear'/'clickup' são espelho read-only de sistema
-  // externo e nunca têm o status sobrescrito aqui. `readOnly` (Viewer) também
-  // não dispara escrita: mesmo que a Firestore rule permita, a UI não grava
-  // nada silenciosamente para quem só pode ler.
+  // Gatilho automático (lazy) de "Atrasado": roda só quando ESTA tarefa
+  // específica é aberta, nunca como varredura em lote. `isEditable` já
+  // restringe às `source` que este app gerencia — tarefas 'linear'/'clickup'
+  // são espelho read-only de sistema externo e nunca têm o status sobrescrito
+  // aqui. `readOnly` (Viewer) também não dispara escrita: a UI não grava nada
+  // silenciosamente para quem só pode ler.
   //
   // Excluídas as tarefas com vocabulário de status granular/derivado — o
   // `<select>` genérico (STATUS_OPTIONS, que ganhou "Atrasado") não é o que
   // essas telas usam:
-  // - `ACCESSIBILITY_RAW_OPTIONS[task.title]`/`rawStatusOptions`: régua
-  //   própria (Áudio Descrição/Libras/Site, Rádio Novela) — sobrescrever
-  //   `status` sem tocar `rawStatus` quebraria `rawToStandard`/
-  //   `radioNovelaRawToStandard`, que não conhecem `'atrasado'`.
+  // - tarefas com `rawStatusOptions`: têm régua de status própria, e
+  //   sobrescrever `status` sem tocar `rawStatus` deixaria os dois
+  //   inconsistentes (as conversões não conhecem `'atrasado'`).
   // - `task.rawStatus` sem as duas opções acima: status CALCULADO a partir
   //   das subtarefas (tarefa pai) — não é um valor que se sobrescreve aqui.
   useEffect(() => {
@@ -620,13 +600,13 @@ export function TaskDetailModal({
   if (!open || !task) return null
 
   /**
-   * ELO-3182 (modo "documento" da Pedagogia): grava UM campo por vez, sem
+   * (modo "documento" da Pedagogia): grava UM campo por vez, sem
    * fechar o modal — diferente de `handleSave` (formulário clássico, grava
    * tudo de uma vez e chama `onClose()`). Cada `InlineEditableText` chama
    * esta função no blur/Enter; `onSave` ainda é notificado (mantém o audit
-   * log de `MarketingQuadroPage.onSave` funcionando, que faz `diffFields`
-   * contra o valor anterior — sem isso as edições em modo documento
-   * ficariam INVISÍVEIS no log de auditoria).
+   * log da página do quadro funcionando, que faz `diffFields` contra o valor
+   * anterior — sem isso as edições em modo documento ficariam INVISÍVEIS no
+   * log de auditoria).
    */
   async function saveField(patch: PMTaskPatch) {
     if (!task) return
@@ -644,7 +624,7 @@ export function TaskDetailModal({
   }
 
   /**
-   * ELO-3182 (modo "documento" da Pedagogia): grava recorrência IMEDIATAMENTE
+   * (modo "documento" da Pedagogia): grava recorrência IMEDIATAMENTE
    * a cada mudança no `RecurrenceControl`, em vez de esperar um Salvar final
    * que não existe mais nesse modo. Mesmo par `setDoc`/`updateDoc` de
    * `handleSave` (recorrência é `FieldValue`, por isso fica fora de
@@ -731,14 +711,14 @@ export function TaskDetailModal({
           referencias: referencias.trim() || null,
           linkRoteiro: linkRoteiro.trim() || null,
         } : {}),
-        // ELO-2032: só grava `avisoApi` em tarefas que JÁ têm o campo — ele é
-        // exclusivo do fluxo de Acessibilidade (ELO-1850). Antes era gravado em
+        // Só grava `avisoApi` em tarefas que JÁ têm o campo — ele é
+        // exclusivo do fluxo de Acessibilidade. Antes era gravado em
         // todo save (estado inicia em `false`), então qualquer tarefa salva pelo
         // modal ganhava `avisoApi: false` — e como a condição que exibe o campo
         // de responsável usa `task.avisoApi === undefined`, o campo sumia
         // permanentemente da tarefa depois do primeiro save.
         ...(task.avisoApi !== undefined ? { avisoApi } : {}),
-        // ELO-2964: `progress` passou a ser gravado SEMPRE, não só nas tarefas
+        // `progress` passou a ser gravado SEMPRE, não só nas tarefas
         // com régua de etapas própria (`rawOpts`). Antes, salvar por este modal
         // — o caminho usado quando falta prazo/início/responsável para concluir
         // — gravava `status: 'done'` e deixava o `progress` no 0 anterior,
@@ -750,7 +730,7 @@ export function TaskDetailModal({
           : { progress: status === 'done' ? 100 : status === 'todo' ? 0 : (task.progress ?? 0) }),
       }
       await updatePMTask(task.projectId, task.bucketId, task.id, patch, {
-        // ELO-3121: handleSave é sempre escrita MANUAL (a transição automática
+        // HandleSave é sempre escrita MANUAL (a transição automática
         // grava direto via applyLazyOverdueTransition, sem passar por aqui) —
         // então qualquer save por este modal invalida um `previousStatusBeforeAtrasado`
         // residual de uma marcação automática anterior. Sem isso, uma tarefa que já
@@ -773,16 +753,16 @@ export function TaskDetailModal({
           checklistDone: task.checklist.length,
         })
       }
-      // ELO-2123: salva duração no bucket quando o callback for fornecido
+      // Salva duração no bucket quando o callback for fornecido
       if (onDuracaoSave) {
         await onDuracaoSave(localDuracao.trim() || null)
       }
-      // ELO-2122: salva coleção no bucket quando o callback for fornecido
+      // Salva coleção no bucket quando o callback for fornecido
       if (onColecaoSave) {
         await onColecaoSave(localColecao.trim() || null)
       }
-      // ELO-2652: salva o tamanho do livro no bucket. `null` em campo limpo —
-      // nunca `NaN` nem `0`, que seriam lidos como "livro de zero páginas".
+      // Salva as contagens na coluna. `null` em campo limpo — nunca `NaN`
+      // nem `0`, que seriam lidos como "zero páginas".
       if (onTamanhoLivroSave) {
         await onTamanhoLivroSave({
           paginas: parseContagem(localPaginas),
@@ -802,10 +782,10 @@ export function TaskDetailModal({
     }
   }
 
-  // ── ELO-2652: validação do tamanho do livro (páginas + caracteres) ──────────
+  // ── validação das contagens (páginas + caracteres) ────────────────
   // A obrigatoriedade é INCREMENTAL, não retroativa: só morde quando o usuário
   // mexe nos campos. Exigir sempre travaria a edição de toda tarefa antiga —
-  // ninguém conseguiria corrigir uma data sem antes caçar os números do livro.
+  // ninguém conseguiria corrigir uma data sem antes caçar esses números.
   const paginasVazio = localPaginas.trim() === ''
   const caracteresVazio = localCaracteres.trim() === ''
   const paginasInvalido = !paginasVazio && !isContagemValida(localPaginas)
@@ -815,15 +795,15 @@ export function TaskDetailModal({
   const tamanhoLivroIncompleto =
     onTamanhoLivroSave !== undefined && paginasVazio !== caracteresVazio
   const tamanhoLivroInvalido = paginasInvalido || caracteresInvalido
-  // Aviso informativo (NÃO bloqueia): livro ainda sem os números.
+  // Aviso informativo (NÃO bloqueia): contagens ainda não preenchidas.
   const tamanhoLivroAusente =
     onTamanhoLivroSave !== undefined && paginasVazio && caracteresVazio
 
-  // ELO-2193: bloqueia salvar quando requireDueDate=true e status=done sem datas ou sem atribuído
+  // Bloqueia salvar quando requireDueDate=true e status=done sem datas ou sem atribuído
   const dueDateRequired = requireDueDate && status === 'done' && !dueDate
   const startDateRequired = requireDueDate && status === 'done' && !startDate
   const assigneesRequired = requireDueDate && status === 'done' && assigneesNames.length === 0
-  // alerta informativo (não bloqueia) ao mover para in_progress sem atribuído
+  // Alerta informativo (não bloqueia) ao mover para in_progress sem atribuído
   const assigneesInProgressAlert = requireDueDate && status === 'in_progress' && assigneesNames.length === 0
   const canSave =
     (!recurrenceEnabled || recurrencePattern !== 'custom-days' || recurrenceDays.length > 0) &&
@@ -836,12 +816,10 @@ export function TaskDetailModal({
 
   return (
     <div
-      // Pedagogia: alinhado ao topo (não centralizado) — é como o Trello
-      // real posiciona o modal, e o Marcos pediu "mais para cima" depois de
-      // ver a versão centralizada. `pt-[6vh]` no desktop; reduzido no mobile
-      // (`pt-3`) para não empurrar o rodapé do modal (`max-h-[90vh]`) pra
-      // fora da viewport em telas baixas. Outras áreas seguem centralizadas,
-      // sem mudança.
+      // Pedagogia: modal alinhado ao topo, não centralizado. `pt-[6vh]` no
+      // desktop; reduzido no mobile (`pt-3`) para não empurrar o rodapé do
+      // modal (`max-h-[90vh]`) pra fora da viewport em telas baixas. As outras
+      // áreas seguem centralizadas.
       className={
         isPedagogia
           ? isMobile
@@ -860,12 +838,9 @@ export function TaskDetailModal({
         className={isPedagogia ? 'relative w-full max-w-[1075px] max-h-[90vh] flex flex-col overflow-hidden' : 'relative w-full max-w-[900px] max-h-[90vh] flex flex-col overflow-hidden'}
         style={{
           background: 'var(--eh-surface)',
-          // Refinamento visual Pedagogia: 1075px medido na captura nova do
-          // Trello (imagem de 1360px de largura total, modal de ~172px a
-          // ~1252px ≈ 1080px) — o Marcos preferiu o modal largo mesmo em
-          // coluna única (720px, versão anterior, ficou estreito demais
-          // depois que a coluna direita saiu). Cantos ~8px medidos na
-          // captura real do Trello, menor que o raio padrão do CoreHub
+          // Pedagogia: modal largo (1075px) mesmo em coluna única — os 720px
+          // anteriores ficaram estreitos demais depois que a coluna direita
+          // saiu. Cantos de ~8px, menores que o raio padrão dos demais modais
           // (900px/16px).
           borderRadius: isPedagogia ? 8 : 16,
           boxShadow: '0 24px 60px rgba(15,23,42,0.2)',
@@ -877,12 +852,12 @@ export function TaskDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         {isPedagogia ? (
-          /* Cabeçalho estilo Trello (ELO-3182, só Pedagogia): "chip" da coluna
+          /* Cabeçalho em modo "documento" (só Pedagogia): "chip" da coluna
              acima do título, título maior/semibold, em duas linhas. Ramo
              else abaixo preserva o cabeçalho de 1 linha original byte a
              byte — nenhum wrapper novo entra no caminho de Marketing/
              Administrativo/Editorial/Tecnologia/Audiovisual. */
-          // ELO-3182 (refino, "colocação dos itens mais proporcional... mais
+          // (refino, "colocação dos itens mais proporcional... mais
           // respiro"): gap 3→4 (12px→16px) entre a linha do chip e o bloco
           // do título, e padding 4→5 (16px→20px) no cabeçalho inteiro — dá
           // mais ar ao redor do título maior desta rodada, sem alterar a
@@ -895,10 +870,9 @@ export function TaskDetailModal({
               {bucketName ? (
                 <span
                   className="shrink-0 inline-flex items-center gap-1 font-semibold px-2 py-1"
-                  // ELO-3182 (correção de contraste, pedido do Marcos): era
-                  // --eh-text-2 (#67746f), que sobre --eh-pm-neutral-surface
-                  // (#f1f2f4) media 4,36:1 — JÁ abaixo de AA (4,5:1). Trocado
-                  // pra --eh-pm-modal-text (12,80:1 no claro).
+                  // Correção de contraste: --eh-text-2 (#67746f) sobre
+                  // --eh-pm-neutral-surface (#f1f2f4) media 4,36:1 — abaixo do
+                  // piso AA (4,5:1). --eh-pm-modal-text mede 12,80:1 no claro.
                   style={{ background: 'var(--eh-pm-neutral-surface)', color: 'var(--eh-pm-modal-text)', borderRadius: 4, fontSize: 12 }}
                 >
                   {bucketName.toUpperCase()}
@@ -944,34 +918,20 @@ export function TaskDetailModal({
                 aria-hidden="true"
                 style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--eh-border-hover)', flexShrink: 0 }}
               />
-              {/* ELO-3182 (2ª rodada de refino, pedido do Marcos: "o título
-                  ele é maior, mais destacado, bonito"). Remedido em
-                  `trello-3-modal.png` por VARREDURA DE BLOCO (altura total
-                  das 3 linhas de título ÷ 3, não 1 coluna isolada — mais
-                  robusto contra cair num espaço entre letras): bloco de
-                  y=129 a y=224 = 96px para 3 linhas ⇒ ~32px de altura de
-                  linha. Escalado pela largura real do modal na captura
-                  (~1080px) para o modal do CoreHub (1075px, praticamente
-                  1:1) ⇒ fontSize 24 com lineHeight 1.3 (=31,2px) reproduz
-                  essa proporção — dentro da faixa observada e do peso
-                  fechado como 700 (extremo forte da faixa 600-700 da
-                  medição anterior, coerente com "mais destacado" do pedido).
-                  fontSize 20/fontWeight 650 (rodada anterior) ficava mais
-                  discreto que a referência real.
-                  Modo "documento" (ELO-3182): sem rótulo "Título" nem campo
+              {/* Título grande e destacado: fontSize 24 com lineHeight 1.3
+                  (=31,2px) e peso 700. Os 20px/650 anteriores ficavam
+                  discretos demais para o elemento principal do modal.
+                  Modo "documento": sem rótulo "Título" nem campo
                   de formulário — o próprio texto grande é editável, clicar
                   abre inline, blur/Enter salva (via `saveField`, sem fechar
                   o modal). Viewer (`!isEditable`) vê o texto sem poder
                   clicar (`disabled`).
-                  `maxWidth: 760` (dentro do modal de 1075px): o modal ficou
-                  largo a pedido do Marcos, mas um título/parágrafo
-                  esticando quase 1000px de ponta a ponta é uma linha de
-                  leitura desconfortável — a mesma lógica de qualquer coluna
-                  de texto editorial. Limitando só o BLOCO de texto (não o
-                  modal, que continua largo para as pílulas/Membros/
-                  Etiquetas), o título volta a quebrar em mais de 1 linha
-                  como na captura do Trello, só que com folga à direita em
-                  vez de vazio. */}
+                  `maxWidth: 760` dentro do modal de 1075px: um título ou
+                  parágrafo esticando quase 1000px de ponta a ponta é uma
+                  linha de leitura desconfortável. Limitando só o BLOCO de
+                  texto (não o modal, que continua largo para as
+                  pílulas/Membros/Etiquetas), o título volta a quebrar em
+                  mais de 1 linha, com folga à direita em vez de vazio. */}
               <div id="task-detail-title" className="flex-1" style={{ maxWidth: 760 }}>
                 <InlineEditableText
                   value={task.title}
@@ -1018,7 +978,7 @@ export function TaskDetailModal({
         <div
           ref={scrollRef}
           className={
-            // ELO-3183: modo "documento" editável da Pedagogia vira DUAS
+            // Modo "documento" editável da Pedagogia vira DUAS
             // colunas lado a lado (conteúdo ~2/3 + Comentários ~1/3, medido
             // na referência) — este wrapper deixa de ser scrollável ele
             // mesmo (`overflow-y-auto`/padding somem daqui) porque cada
@@ -1046,7 +1006,7 @@ export function TaskDetailModal({
                     viewport. */}
                 <div
                   ref={leftColumnRef}
-                  // ELO-3182 (refino, "mais respiro vertical") — era space-y-4
+                  // (refino, "mais respiro vertical") — era space-y-4
                   // (16px), agora space-y-6 (24px), mesmo ajuste de
                   // PedagogiaDocumentBody.tsx.
                   className="overflow-y-auto p-4 space-y-6"
@@ -1088,7 +1048,7 @@ export function TaskDetailModal({
                     bucketName={bucketName}
                   />
                 </div>
-                {/* Coluna direita — Comentários (ELO-3183). ~1/3 no desktop;
+                {/* Coluna direita — Comentários. ~1/3 no desktop;
                     no mobile empilha abaixo, preenchendo o restante da
                     altura disponível. `PmArea` vem de `area` (só
                     'pedagogia' chega aqui hoje — ver escopo desta rodada no
@@ -1233,7 +1193,7 @@ export function TaskDetailModal({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <ModalDatePicker label="Início" value={startDate} onChange={setStartDate} scrollContainer={scrollRef.current} disabledAfter={dueDate ?? undefined} />
-                  {/* ELO-2193: alerta inline quando requireDueDate=true e startDate ausente na conclusão */}
+                  {/* Alerta inline quando requireDueDate=true e startDate ausente na conclusão */}
                   {startDateRequired && (
                     <p style={{ fontSize: 12, color: 'var(--eh-danger)', marginTop: 4 }}>
                       Informe a data de Início para concluir a tarefa
@@ -1242,7 +1202,7 @@ export function TaskDetailModal({
                 </div>
                 <div>
                   <ModalDatePicker label="Término" value={dueDate} onChange={setDueDate} scrollContainer={scrollRef.current} disabledBefore={startDate ?? undefined} />
-                  {/* ELO-2193: alerta inline quando requireDueDate=true e dueDate ausente na conclusão */}
+                  {/* Alerta inline quando requireDueDate=true e dueDate ausente na conclusão */}
                   {dueDateRequired && (
                     <p style={{ fontSize: 12, color: 'var(--eh-danger)', marginTop: 4 }}>
                       Informe a data de Término para concluir a tarefa
@@ -1270,7 +1230,7 @@ export function TaskDetailModal({
                   assigneesNames={assigneesNames}
                   onChange={(uids, names) => { setAssignees(uids); setAssigneesNames(names) }}
                 />
-                {/* ELO-2193: alerta inline quando requireDueDate=true e sem atribuído */}
+                {/* Alerta inline quando requireDueDate=true e sem atribuído */}
                 {assigneesRequired && (
                   <p style={{ fontSize: 12, color: 'var(--eh-danger)', marginTop: 4 }}>
                     Atribua ao menos um responsável para concluir a tarefa
@@ -1282,7 +1242,7 @@ export function TaskDetailModal({
                   </p>
                 )}
               </div>
-              {/* ELO-2122: Coleção do livro — só exibido quando callback for fornecido (tarefa pai em Acessibilidade/Rádio Novela) */}
+              {/* Coleção — só exibida quando o callback for fornecido. */}
               {onColecaoSave !== undefined && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Coleção</label>
@@ -1295,7 +1255,7 @@ export function TaskDetailModal({
                   />
                 </div>
               )}
-              {/* ELO-2123: Duração do livro — só exibido quando callback for fornecido (Libras/Rádio Novela) */}
+              {/* Duração — só exibida quando o callback for fornecido. */}
               {onDuracaoSave !== undefined && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Duração do livro</label>
@@ -1308,9 +1268,9 @@ export function TaskDetailModal({
                   />
                 </div>
               )}
-              {/* ELO-2652: Tamanho do livro — só exibido quando o callback for
-                  fornecido (Áudio Descrição e Libras). O dado é do LIVRO (bucket),
-                  então o valor é o mesmo nas duas subtarefas. */}
+              {/* Contagens — só exibidas quando o callback for fornecido. O
+                  dado pertence à COLUNA, então o valor é o mesmo em todas as
+                  subtarefas dela. */}
               {onTamanhoLivroSave !== undefined && (
                 <div>
                   <div className="grid grid-cols-2 gap-4">
@@ -1384,41 +1344,19 @@ export function TaskDetailModal({
                   </div>
                 </div>
               )}
-              {task.source === 'graph' && (
-                <ChecklistSection
-                  items={task.checklist ?? []}
-                  isEditable={isEditable}
-                  onToggleItem={onToggleChecklistItem}
-                  onUpdateItemStatus={onUpdateChecklistItemStatus}
-                  onAddItem={onAddChecklistItem}
-                  onRenameItem={onRenameChecklistItem}
-                  onDeleteItem={onDeleteChecklistItem}
-                  area={area}
-                  bucketName={bucketName}
-                  onApplyTemplate={
-                    area && bucketName
-                      ? (tpl: MarketingTaskTemplate) =>
-                          applyTemplateToTaskChecklist(task.projectId, task.bucketId, task.id, tpl, task.checklist ?? [])
-                      : undefined
-                  }
-                />
-              )}
             </>
             )
           ) : isPedagogia ? (
             /**
-             * Layout estilo Trello para o read-only (ELO-3182, refinamento visual).
+             * Layout em modo "documento" para o estado read-only.
              *
-             * IMPORTANTE: tarefas importadas do Trello gravam `source: 'trello'`
-             * (ver `scripts/firestore/import-trello-agenda-pedagogas.mjs`), que NÃO
-             * está na lista de `isEditable` (`planner`/`graph`/`manual`) — então
-             * TODA tarefa da Pedagogia cai neste ramo read-only hoje, mesmo para
-             * quem tem permissão de escrita (`canWrite`/editor+). Isso é um
-             * comportamento PRÉ-EXISTENTE, não introduzido por este refinamento
-             * visual — sinalizado no relatório como algo a decidir separadamente
-             * (é mudança de comportamento, não de estilo, então fora do escopo
-             * desta issue). O layout abaixo assume esse ramo é o que a Pedagogia
-             * realmente usa hoje.
+             * ATENÇÃO: uma tarefa só é editável se a `source` dela estiver na
+             * lista de `isEditable` (ver acima). Tarefas de origem importada que
+             * ficarem fora dessa lista caem neste ramo read-only mesmo para quem
+             * tem permissão de escrita — o que é intencional para espelho de
+             * sistema externo, mas vira armadilha se a origem for uma importação
+             * única. Ao adicionar uma `source` nova, decida esse ponto de forma
+             * explícita.
              *
              * Rótulos "Datas"/"Status" aqui são só cabeçalhos com ícone (não
              * pílulas clicáveis) — o dado já está exposto ao lado, não faz
@@ -1428,17 +1366,15 @@ export function TaskDetailModal({
              * `PedagogiaDocumentBody`), onde o corpo é longo o bastante pra
              * justificar o atalho.
              *
-             * Sem coluna direita/"Resumo": removida a pedido do Marcos
-             * (duplicava Status/Datas que já estavam visíveis). Modal em
-             * coluna única em todo estado da Pedagogia agora, inclusive
-             * aqui. Sem Checklist/Anexo: não existem para `source: 'trello'`
-             * /este ramo read-only — nenhum pretende ser clicável.
+             * Sem coluna direita/"Resumo": ela duplicava Status/Datas que já
+             * estavam visíveis. A Pedagogia usa coluna única em todos os
+             * estados, inclusive aqui. Sem Checklist/Anexo: não existem neste
+             * ramo read-only — nenhum pretende ser clicável.
              */
             <div className="space-y-4">
-              {/* ELO-3182 (correção de contraste, pedido do Marcos: "quero
-                  que fosse mais preto"): os 3 rótulos de seção abaixo
+              {/* Correção de contraste: os 3 rótulos de seção abaixo
                   (Descrição/Datas/Status) usavam --eh-text-2 (4,88:1 sobre
-                  --eh-surface branco) — trocados pra --eh-pm-modal-text
+                  --eh-surface branco) — trocados por --eh-pm-modal-text
                   (14,34:1), mesmo tom escuro do título/cabeçalho de coluna. */}
               {(task.observacoes || task.description) && (
                 <div>
@@ -1527,9 +1463,9 @@ export function TaskDetailModal({
                   </div>
                 </div>
               )}
-              {/* ELO-2652: Viewer vê o tamanho do livro, mas não edita. Mesma
-                  condição do ramo editável (a prop é o que marca "esta tarefa
-                  tem tamanho de livro"), com `pt-BR` para separar milhar. */}
+              {/* Viewer vê as contagens, mas não edita. Mesma condição do ramo
+                  editável (a prop é o que marca "esta tarefa tem contagens"),
+                  com `pt-BR` para separar milhar. */}
               {onTamanhoLivroSave !== undefined && (
                 <div className="grid grid-cols-2 gap-4">
                   <ReadField label="Páginas do livro" value={paginas != null ? paginas.toLocaleString('pt-BR') : '—'} />
@@ -1557,11 +1493,11 @@ export function TaskDetailModal({
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
 
-        {/* Rodapé Cancelar/Salvar — SÓ fora da Pedagogia (ELO-3182). Modo
+        {/* Rodapé Cancelar/Salvar — SÓ fora da Pedagogia. Modo
             "documento" da Pedagogia salva por campo (blur/Enter, via
             `saveField` dentro de `PedagogiaDocumentBody`), sem esperar um
-            clique em "Salvar" — igual ao Trello real, que não tem essa
-            barra. `isPedagogia && isEditable` nunca chega aqui: o corpo
+            clique em "Salvar", então não há barra nenhuma ali.
+            `isPedagogia && isEditable` nunca chega aqui: o corpo
             inteiro já é outro componente, este rodapé só existe pro
             formulário clássico das outras áreas. */}
         {!isPedagogia && (
@@ -1608,9 +1544,9 @@ export function TaskDetailModal({
               setConfirmDeleteTask(false)
               onClose()
             } catch (err) {
-              // ELO-2978: antes o erro sumia aqui e o modal inteiro fechava —
-              // a tarefa "sumia" da tela e voltava no reload.
-              console.error('[ELO-2978] Falha ao excluir tarefa', { taskId: task.id, title: task.title, err })
+              // Não engolir o erro: se o modal fechasse aqui, a tarefa "sumia"
+              // da tela e reaparecia no reload, sem explicação nenhuma.
+              console.error('[TaskDetailModal] Falha ao excluir tarefa', { taskId: task.id, title: task.title, err })
               const code = (err as { code?: string } | null)?.code
               setDeleteTaskError(
                 code === 'permission-denied'

@@ -33,9 +33,12 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
   if (!open) return null
 
   const q = search.trim().toLowerCase()
-  // ELO-2891: só equipe interna é candidata a membro — `users` traz a coleção
-  // inteira, que inclui cliente de e-commerce e conta de teste.
-  const notInTeam = onlyInternalUsers(users).filter((u) => !selected.has(u.name))
+  // `team` guarda uid, não nome — `selected` precisa usar a mesma chave, ou o
+  // Set nunca casa com a lista de usuários (é o que fazia os chips mostrarem
+  // o uid cru: a UI achava que ninguém da lista estava selecionado e caía no
+  // valor bruto do array).
+  const usersByUid = new Map(users.map((u) => [u.uid, u]))
+  const notInTeam = onlyInternalUsers(users).filter((u) => !selected.has(u.uid))
   const filtered = q
     ? notInTeam.filter(
         (u) =>
@@ -44,11 +47,11 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
       )
     : notInTeam
 
-  function toggle(name: string) {
+  function toggle(uid: string) {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
+      if (next.has(uid)) next.delete(uid)
+      else next.add(uid)
       return next
     })
   }
@@ -135,30 +138,36 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
             <p style={{ margin: 0, fontSize: 13, color: 'var(--eh-text-2)' }}>Nenhum membro adicionado.</p>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {Array.from(selected).map((name) => (
-                <span
-                  key={name}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    fontSize: 12.5, borderRadius: 20,
-                    padding: '3px 10px 3px 12px',
-                    background: 'var(--eh-bar-track)', color: 'var(--eh-text)',
-                  }}
-                >
-                  {name}
-                  <button
-                    type="button"
-                    aria-label={`Remover ${name}`}
-                    onClick={() => toggle(name)}
+              {Array.from(selected).map((uid) => {
+                // Membro salvo antes de existir na lista atual de usuários
+                // (removido do seed, por exemplo) — mostra o uid em vez de
+                // sumir silenciosamente, mas sem travar a remoção.
+                const label = usersByUid.get(uid)?.name ?? uid
+                return (
+                  <span
+                    key={uid}
                     style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--eh-text-2)', fontSize: 15, lineHeight: 1, padding: '0 1px',
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      fontSize: 12.5, borderRadius: 20,
+                      padding: '3px 10px 3px 12px',
+                      background: 'var(--eh-bar-track)', color: 'var(--eh-text)',
                     }}
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    {label}
+                    <button
+                      type="button"
+                      aria-label={`Remover ${label}`}
+                      onClick={() => toggle(uid)}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--eh-text-2)', fontSize: 15, lineHeight: 1, padding: '0 1px',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
+              })}
             </div>
           )}
         </div>
@@ -195,7 +204,7 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
             </p>
           ) : (
             filtered.map((u) => {
-              const checked = selected.has(u.name)
+              const checked = selected.has(u.uid)
               return (
                 <label
                   key={u.uid}
@@ -216,7 +225,7 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggle(u.name)}
+                    onChange={() => toggle(u.uid)}
                     style={{
                       flexShrink: 0, accentColor: 'var(--eh-primary)',
                       width: 15, height: 15,

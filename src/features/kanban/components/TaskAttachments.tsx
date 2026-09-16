@@ -38,7 +38,7 @@ function kindOf(attachment: PMTaskAttachment): AttachmentKind {
 
 /**
  * Par de tokens fundo/texto por tipo de arquivo — reaproveita a paleta de
- * etiquetas da Pedagogia (ELO-3182, `--eh-label-*-bg/-fg`), já medida
+ * etiquetas da Pedagogia (`--eh-label-*-bg/-fg`), já medida
  * ⩾4,5:1 nos dois temas (ver comentário em `globals.css`). Nenhum token novo
  * foi criado para este refino: os pares abaixo já existiam declarados no CSS
  * e ainda não tinham consumidor algum no app.
@@ -86,18 +86,13 @@ function KindMark({ kind, extension }: { kind: AttachmentKind; extension: string
 }
 
 /**
- * Miniatura do anexo (refino visual estilo Trello, "deixar mais bonito"). Um
- * bloco de 44×44 colorido por tipo (PDF vermelho, planilha verde, imagem
- * azul, genérico neutro) substitui o antigo ícone monocromático de 18px.
+ * Miniatura do anexo: um bloco de 44×44 colorido por tipo (PDF vermelho,
+ * planilha verde, imagem azul, genérico neutro).
  *
- * Para imagem, troca o bloco azul pela PRÓPRIA foto assim que ela entra (ou
- * quase entra) na viewport — mesmo padrão de lazy-load de
- * `features/adelo/components/PageImagePreview.tsx` (ELO-2903): sem isso,
- * abrir um card com várias fotos anexadas disparia um `getBlob()` autenticado
- * por imagem de uma vez só, só para desenhar a lista. `getBlob()` é
- * obrigatório aqui (nunca `getDownloadURL`, ver JSDoc do componente) — então
- * a miniatura de imagem paga o mesmo custo de segurança que abrir o anexo,
- * só que adiado até realmente aparecer na tela.
+ * Para imagem, troca o bloco colorido pela PRÓPRIA foto assim que ela entra
+ * (ou quase entra) na viewport. O lazy-load via IntersectionObserver não é
+ * enfeite: sem ele, abrir um card com várias fotos anexadas carregaria todos
+ * os binários de uma vez só para desenhar a lista.
  */
 function AttachmentThumb({ attachment }: { attachment: PMTaskAttachment }) {
   const kind = kindOf(attachment)
@@ -162,14 +157,13 @@ function AttachmentThumb({ attachment }: { attachment: PMTaskAttachment }) {
 }
 
 /**
- * Lista de anexos + upload + exclusão do modal de tarefa da Pedagogia (ELO-3184
- * Fase 1). Os 240 anexos importados do Trello (e qualquer anexo novo enviado
- * pela UI) vivem em `pmoffice/pedagogia/tarefas/{taskId}/{fileName}`.
+ * Lista de anexos + upload + exclusão, exibida no modal de tarefa. Cada anexo
+ * é indexado por um `storagePath` derivado do id da tarefa e do nome do
+ * arquivo (ver `buildAttachmentStoragePath`).
  *
- * Abrir um anexo NUNCA usa `getDownloadURL()` — o token é permanente e
- * não-autenticado, e os PDFs carregam dado pessoal de escola (endereço,
- * telefone, e-mail, INEP). Usa `getBlob()` (exige sessão autenticada válida
- * no momento) + `URL.createObjectURL`, ver `downloadTaskAttachment`.
+ * Abrir um anexo passa por `downloadTaskAttachment`, que devolve uma Object
+ * URL de vida curta — nunca uma URL pública permanente. Anexos podem conter
+ * dado sensível, então o acesso deve continuar exigindo a sessão em curso.
  */
 export function TaskAttachments({
   taskId,
@@ -240,8 +234,8 @@ export function TaskAttachments({
   // MESMO valor de `openPickerSignal` (0 na primeira chamada real de
   // useState). Uma guarda de "primeira execução" (`useRef(true)` zerado no
   // próprio efeito) é consumida na 1ª chamada e falha silenciosamente na 2ª,
-  // abrindo o seletor de arquivo sozinho ao abrir a tarefa — bug real
-  // encontrado pelo Marcos. Comparar contra o valor inicial é imune a
+  // abrindo o seletor de arquivo sozinho ao abrir a tarefa — bug real, já
+  // observado. Comparar contra o valor inicial é imune a
   // quantas vezes o efeito roda: só dispara quando o número realmente muda
   // (ou seja, quando o botão "Anexo" é clicado de verdade).
   const initialPickerSignal = useRef(openPickerSignal)
@@ -321,7 +315,7 @@ export function TaskAttachments({
     setDeleting(true)
     setDeleteError(null)
     try {
-      // Ordem OBRIGATÓRIA: Storage primeiro, Firestore depois. Se a exclusão
+      // Ordem OBRIGATÓRIA: o binário primeiro, o metadado depois. Se a exclusão
       // do Storage falhar, a entrada em `attachments` NÃO é removida — senão
       // o arquivo fica órfão (invisível na UI, mas continua existindo e
       // pagando armazenamento, sem nenhuma referência que permita achá-lo de
@@ -361,8 +355,8 @@ export function TaskAttachments({
               className="flex items-center gap-1"
               style={{ background: 'var(--eh-pm-neutral-surface)', borderRadius: 10 }}
             >
-              {/* Linha inteira clicável (<button>, não <div onClick> — o gate de
-                  UX já reprovou <div> fazendo esse papel nesta tela). Cobre
+              {/* Linha inteira clicável — <button>, nunca <div onClick>, que
+                  não é focável nem acionável por teclado. Cobre
                   miniatura + nome + tamanho; o botão de excluir logo abaixo é
                   IRMÃO deste, não filho — <button> dentro de <button> não é
                   válido em HTML. */}
@@ -370,7 +364,7 @@ export function TaskAttachments({
                 type="button"
                 onClick={() => handleOpen(attachment)}
                 disabled={openingId === attachment.id || !attachment.storagePath}
-                title={attachment.storagePath ? `Abrir ${attachment.fileName}` : 'Ainda não disponível — pendente de importação do Trello'}
+                title={attachment.storagePath ? `Abrir ${attachment.fileName}` : 'Arquivo ainda não disponível'}
                 aria-label={`Abrir anexo ${attachment.fileName}`}
                 className="eh-attachment-row flex-1 min-w-0 flex items-center gap-2.5 text-left"
                 style={{

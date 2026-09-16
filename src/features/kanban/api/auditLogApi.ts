@@ -1,13 +1,10 @@
 /**
- * Audit log desativado no app de demonstração — sem coleção onde gravar.
+ * Audit log sem persistência: `logPmAction` só registra em `console.debug`.
  *
- * `logPmAction` mantém a assinatura de 3 parâmetros do CoreHub e o
- * comportamento essencial de lá: fire-and-forget que NUNCA lança nem bloqueia
- * a ação principal. Aqui só registra em `console.debug`.
- *
- * `action` e `target.type` são `string` (no original são unions fechadas com
- * ~150 e ~30 membros, definidas em `features/audit-log/types.ts`, que não foi
- * copiado) — os call sites passam literais, que satisfazem `string`.
+ * O contrato importante é ser fire-and-forget — NUNCA lança nem bloqueia a
+ * ação principal, então plugar um destino real depois não muda nenhum call
+ * site. `action` e `target.type` são `string` propositalmente abertos; os call
+ * sites passam literais.
  */
 
 export type PmArea =

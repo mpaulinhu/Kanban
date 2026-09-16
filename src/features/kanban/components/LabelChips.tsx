@@ -2,20 +2,16 @@ import type { PMOfficeLabel } from '../types/pmOffice'
 import { labelColorTokens, labelSolidColorTokens, resolveLabelDisplay } from '../utils/labelColors'
 
 /**
- * Chips de etiqueta de um card (ELO-3182). Cor via `var(--eh-label-*)` —
- * nunca hex do Trello. Nome sempre visível (WCAG 2.2 AA 1.4.1): a cor nunca
- * é o único portador de informação.
+ * Chips de etiqueta de um card. Cor via `var(--eh-label-*)`, nunca hex cru.
+ * Nome sempre visível (WCAG 2.2 AA 1.4.1): a cor nunca é o único portador de
+ * informação.
  *
- * Duas variantes estilo Trello (refinamento visual, exclusivo da área
- * Pedagogia), ambas com a MESMA paleta saturada (`labelSolidColorTokens`) —
- * confirmado por amostragem de pixel que o card e o modal do Trello real
- * usam a cor idêntica (`#4bce97` verde), só a forma muda:
- * - `variant="solid"`: barra curta (~40px), no topo do card — como no
- *   board real.
- * - `variant="solid-pill"`: pílula arredondada com o nome — como na seção
- *   Etiquetas do modal de detalhe (`trello-3-modal.png`).
- * Default `'chip'` preserva o visual pastel de Marketing/Administrativo
- * sem mudança.
+ * Duas variantes saturadas (exclusivas da área Pedagogia) compartilham a MESMA
+ * paleta (`labelSolidColorTokens`) — só a forma muda:
+ * - `variant="solid"`: barra curta (~40px), no topo do card.
+ * - `variant="solid-pill"`: pílula arredondada com o nome, usada na seção
+ *   Etiquetas do modal de detalhe.
+ * Default `'chip'` é o visual pastel das demais áreas.
  */
 export function LabelChips({
   labelIds,
@@ -33,12 +29,12 @@ export function LabelChips({
   if (resolved.length === 0) return null
 
   if (variant === 'solid') {
-    // marginBottom 8: medido na captura do Trello — a barra de etiqueta
-    // respira mais do lado do título do que os 6px anteriores davam.
+    // marginBottom 8: a barra de etiqueta respira mais do lado do título do
+    // que os 6px anteriores davam.
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
         {resolved.map((label) => {
-          const { bg, fg } = labelSolidColorTokens(label.trelloColor)
+          const { bg, fg } = labelSolidColorTokens(label.colorKey)
           return (
             <span
               key={label.id}
@@ -66,8 +62,7 @@ export function LabelChips({
                   `text-overflow: ellipsis` não tem efeito num container
                   `inline-flex` (só se aplica a bloco), então antes o nome
                   longo VAZAVA para fora da cor de fundo em vez de virar
-                  reticências — foi o que o Marcos viu em "ALINHAMENTO
-                  FORMAÇÃO". `minWidth: 0` é o que permite o filho encolher
+                  reticências. `minWidth: 0` é o que permite o filho encolher
                   abaixo do próprio conteúdo dentro de um flex. */}
               <span
                 style={{
@@ -93,7 +88,7 @@ export function LabelChips({
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {resolved.map((label) => {
-          const { bg, fg } = labelSolidColorTokens(label.trelloColor)
+          const { bg, fg } = labelSolidColorTokens(label.colorKey)
           return (
             <span
               key={label.id}
@@ -128,7 +123,7 @@ export function LabelChips({
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
       {resolved.map((label) => {
-        const { bg, fg } = labelColorTokens(label.trelloColor)
+        const { bg, fg } = labelColorTokens(label.colorKey)
         return (
           <span
             key={label.id}

@@ -1,7 +1,7 @@
 # Kanban
 
-Gestão de tarefas estilo Trello, extraída da área de Pedagogia do CoreHub para
-rodar como aplicação independente.
+Quadro de tarefas para equipes: colunas, cards arrastáveis, etiquetas,
+checklists, comentários, anexos e um calendário das entregas.
 
 ## Rodar
 
@@ -17,54 +17,28 @@ Abre em `http://localhost:5200`.
 | Rota | O que é |
 |---|---|
 | `/quadro` | Quadro Kanban — arrastar cards e colunas, modal de detalhe |
-| `/grade` | Tabela com filtros (status, prioridade, categoria, responsável, período) e ordenação |
 | `/calendario` | Calendário em Mês/Semana/Dia, arrastando tarefa para mudar a data |
 | `/templates` | Modelos de checklist reutilizáveis |
 
-## Estado atual
+## O que já funciona
 
-A interface está completa e funcional — arrastar cards e colunas, modal de
-detalhe, etiquetas nomeadas com escolha de cor, comentários, anexos,
-checklist (com modelos aplicáveis a uma tarefa existente), responsáveis,
-filtro por etiqueta, busca, arquivamento e modo ampliado.
+Arrastar cards e colunas, modal de detalhe, etiquetas nomeadas com escolha de
+cor, comentários, anexos, checklist (com modelos aplicáveis a uma tarefa
+existente), responsáveis, busca, arquivamento e modo ampliado. Os filtros do
+cabeçalho recortam o quadro por etiqueta, responsável e status, e ordenam por
+título ou data. Cada coluna tem cor própria, e o nome do quadro é editável.
 
-**Os dados são de demonstração**, guardados na memória do navegador e
-espelhados em `localStorage` (sobrevivem a um F5, não saem da máquina). Não
-há banco de dados nem login: qualquer pessoa que abrir edita tudo.
+## Limites da versão atual
 
-## O que mudou em relação ao CoreHub
+**Não há banco de dados nem contas.** Os dados nascem de um conjunto de
+exemplo e ficam no `localStorage` do navegador: sobrevivem a um F5, mas não
+saem da máquina e não são compartilhados entre pessoas. Quem abrir o app edita
+tudo — não existe login nem permissão.
 
-O objetivo era extrair a tela sem arrastar a infraestrutura do back-office
-inteiro. As camadas acopladas foram substituídas por equivalentes mínimos,
-mantendo a mesma superfície para os componentes:
-
-| No CoreHub | Aqui |
-|---|---|
-| Firestore + Storage | Repositório em memória (`features/kanban/api/store.ts`) |
-| Autenticação (OAuth, claims, Cloud Functions) | Usuário fixo (`providers/AuthProvider.tsx`) |
-| Controle de acesso por papel, 4 tabelas | Todo usuário edita (`hooks/useRole.ts`) |
-| Trilha de auditoria no banco | `console.debug` (`features/kanban/hooks/usePmAudit.ts`) |
-| `@grupo-elo-editorial/shared-ui-react` | Botão local no `ConfirmDialog` |
-| `@eloeditorial/*` (pacotes do monorepo) | Removidos |
-
-Cada um desses é um ponto de extensão isolado: ligar um banco de verdade, por
-exemplo, é reimplementar os módulos de `features/kanban/api/` mantendo as
-assinaturas — nenhum componente precisa mudar.
-
-### Correção herdada
-
-As classes `bg-primary`, `ring-ring`, `border-input` e `text-destructive`,
-usadas no modal de detalhe, não têm cor definida no CoreHub — nem no CSS dele,
-nem no pacote de design tokens — e por isso renderizam sem efeito lá. Aqui
-elas são definidas em `styles/globals.css`, apontando para a paleta `--eh-*`.
-
-### Valores medidos
-
-Os tokens `--eh-pm-*` (gradiente do quadro, cinza das colunas, cor do texto,
-opacidade do cabeçalho) foram amostrados pixel a pixel de capturas do Trello
-real, e os pares de cor das etiquetas foram escolhidos por medição individual
-de contraste (todos ⩾4,5:1). Os comentários em `globals.css` registram cada
-medição — não substitua esses valores por aproximações.
+Trocar isso por um backend real é reimplementar os módulos de
+`src/features/kanban/api/` mantendo as assinaturas atuais: eles já são a única
+fronteira de dados do app, e nenhum componente fala com a persistência
+diretamente.
 
 ## Estrutura
 
@@ -73,11 +47,18 @@ src/
   components/         UserAvatar, UserProfilePopover, Toast, ConfirmDialog
   features/kanban/
     KanbanBoardPage.tsx   o quadro
-    pages/                grade, calendário, templates
-    api/                  dados (hoje em memória)
+    pages/                calendário, templates
+    api/                  dados (hoje em memória + localStorage)
     components/           card, modal, etiquetas, comentários, anexos, checklist
     types/ utils/ hooks/
   layouts/            casca do app e modo ampliado
   providers/          usuário
   styles/globals.css  tokens
 ```
+
+## Cores e contraste
+
+Os pares de cor das etiquetas, os fundos de coluna e as cores do cabeçalho
+foram escolhidos por medição de contraste — todos os textos ficam em 4,5:1 ou
+mais, conforme a WCAG 2.2 AA. Os comentários em `styles/globals.css` registram
+cada medição; ao mexer numa cor, refaça a conta em vez de aproximar no olho.

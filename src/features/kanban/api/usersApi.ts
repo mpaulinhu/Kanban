@@ -1,11 +1,10 @@
 /**
- * Usuários em memória. `UserRecord` é copiado fielmente do CoreHub — os
- * componentes leem `name`, `email`, `photoURL`, `jobTitle`, `role` e `uid`.
+ * Usuários em memória. Os componentes leem `name`, `email`, `photoURL`,
+ * `jobTitle`, `role` e `uid`.
  *
- * Os três tipos que o original importa de `@eloeditorial/shared-types`
- * (`Department`, `DepartmentRoles`, `ScreenRoleOverrides`) são declarados aqui
- * como aliases abertos: o pacote não existe neste app e nenhum componente
- * copiado inspeciona o conteúdo desses campos.
+ * `Department`, `DepartmentRoles` e `ScreenRoleOverrides` são aliases abertos
+ * de propósito: nenhum componente inspeciona o conteúdo desses campos, então
+ * fechá-los em unions só criaria acoplamento sem ganho.
  */
 
 // `seed.ts` importa daqui só o TIPO `UserRecord` — sem ciclo em runtime.

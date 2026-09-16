@@ -289,7 +289,7 @@ function MonthView({ calendarDays, tasksByDay, today, onDayClick, onTaskClick }:
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 8px' : '16px 12px 16px 20px' }}>
       {/* As 7 colunas permanecem no mobile — é a natureza da grade mensal.
           O que encolhe é gap, padding e altura da célula, para caber em ~390px
-          sem scroll horizontal (ELO-1130). A inicial do dia da semana também
+          sem scroll horizontal. A inicial do dia da semana também
           é abreviada para 1 letra. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: isMobile ? 2 : 4 }}>
         {WEEK_DAYS.map((d) => (
@@ -564,8 +564,8 @@ function DroppableSidebar({
 }
 
 /**
- * Base de rota e título default por área (ELO-2936, com Pedagogia na
- * ELO-3182). `area` default `'marketing'` preserva o comportamento desta
+ * Base de rota e título default por área (
+ *). `area` default `'marketing'` preserva o comportamento desta
  * tela para quem já a usa — Administrativo/Pedagogia passam
  * `area="administrativo"`/`area="pedagogia"` via router.
  */
@@ -590,8 +590,8 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
   const navBase = NAV_BASE[area]
   const { roleLevel, canWriteScreen } = useRole()
   const canSeeTemplates = true
-  // ELO-1954: Viewer só pode ler o calendário — sem editar tarefa via modal.
-  // ELO-2214: exceção por tela precisa afetar a escrita, não só a visibilidade.
+  // Viewer só pode ler o calendário — sem editar tarefa via modal.
+  // Exceção por tela precisa afetar a escrita, não só a visibilidade.
   const canWrite = canWriteScreen()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
@@ -604,7 +604,7 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
 
   const [projectId, setProjectId] = useState<string | null>(null)
   const [projectTitle, setProjectTitle] = useState(DEFAULT_TITLE[area])
-  // ELO-2044: audit log das acoes humanas desta tela.
+  // Audit log das acoes humanas desta tela.
   const audit = usePmAudit(area, projectId, projectTitle)
   const [tasks, setTasks] = useState<PMTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -623,7 +623,7 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
   )
 
   useEffect(() => {
-    // ELO-2936: para 'marketing' resolve exatamente como antes (via
+    // Para 'marketing' resolve exatamente como antes (via
     // `getMarketingProject` dentro de `getOrCreateAreaProject`); para
     // 'administrativo' cria o projeto singleton na 1ª visita (idempotente).
     getOrCreateAreaProject(area)
@@ -640,8 +640,8 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
     return unsub
   }, [projectId])
 
-  // ELO-2804: usa usersApi.listUsers() (sem includeInactive) em vez de query
-  // direta ao Firestore — herda o filtro de inativos da ELO-2803 sem precisar
+  // Usa usersApi.listUsers() (sem includeInactive) em vez de ler a lista
+  // crua: herda o filtro de inativos sem precisar
   // reimplementá-lo aqui. Não filtra `task.assigneesNames`/`task.assignees`
   // já persistidos na tarefa: essas listas são um snapshot no momento da
   // atribuição, resolvidas em `TaskDetailModal`/`MarketingKanbanCard`
@@ -830,7 +830,6 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
               empilha e as abas rolam horizontalmente dentro da própria faixa. */}
           <div style={{ display: 'flex', gap: 4, overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? 2 : undefined }}>
             <NavButton label="Quadro" active={false} onClick={() => navigate(`${navBase}/quadro`)} />
-            <NavButton label="Grade" active={false} onClick={() => navigate(`${navBase}/grade`)} />
             <NavButton label="Calendário" active={true} onClick={() => undefined} />
             {canSeeTemplates && (
               <NavButton label="Templates" active={false} onClick={() => navigate(`${navBase}/templates`)} />

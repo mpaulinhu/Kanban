@@ -11,7 +11,7 @@ import {
   isMarketingTemplateSeedAttempted,
   migrateMarketingTemplatesCategorias,
   seedMarketingTemplatesIfNeeded,
-  subscribeAreaTemplates,
+  subscribeTemplates,
   subscribeMarketingBuckets,
   updateMarketingTemplate,
 } from '../api/marketingPlannerApi'
@@ -309,20 +309,12 @@ interface TemplateCardProps {
   onToggle: () => void
   onSave: (updated: MarketingTaskTemplate) => Promise<void>
   onDelete: (id: string) => Promise<void>
-  /** ELO-1954: Viewer só pode expandir/ler o template — sem editar nem remover. */
+  /** Viewer só pode expandir/ler o template — sem editar nem remover. */
   readOnly?: boolean
   bucketNames: string[]
-  /**
-   * ELO-3201: "Marca" (Elo Editora/PeraBook/Ambas) é conceito de campanha de
-   * Marketing/Administrativo — a Pedagogia não publica nada por marca
-   * editorial, então o campo não tem o que significar lá. Oculto só na UI:
-   * `brandScope` continua sendo gravado como `'ambas'` (default do estado),
-   * sem mudar o tipo nem o dado das outras áreas.
-   */
-  showBrandField?: boolean
 }
 
-function TemplateCard({ tpl, expanded, onToggle, onSave, onDelete, readOnly = false, bucketNames, showBrandField = true }: TemplateCardProps) {
+function TemplateCard({ tpl, expanded, onToggle, onSave, onDelete, readOnly = false, bucketNames }: TemplateCardProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<MarketingTaskTemplate>(tpl)
   const [checklistText, setChecklistText] = useState(tpl.checklist.join('\n'))
@@ -369,11 +361,6 @@ function TemplateCard({ tpl, expanded, onToggle, onSave, onDelete, readOnly = fa
     setConfirmingDelete(false)
   }
 
-  const brandScopeLabel: Record<MarketingTaskTemplate['brandScope'], string> = {
-    'elo-editora': 'Elo Editora',
-    perabook: 'PeraBook',
-    ambas: 'Ambas',
-  }
 
   return (
     <div
@@ -444,16 +431,6 @@ function TemplateCard({ tpl, expanded, onToggle, onSave, onDelete, readOnly = fa
         <div style={{ borderTop: '1px solid var(--eh-border)', padding: 16 }}>
           {!editing ? (
             <>
-              {/* Metadados */}
-              {showBrandField && (
-                <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: 'var(--eh-text-3)' }}>
-                    <strong style={{ color: 'var(--eh-text-2)' }}>Marca:</strong>{' '}
-                    {brandScopeLabel[tpl.brandScope]}
-                  </span>
-                </div>
-              )}
-
               {/* Checklist */}
               <div
                 style={{
@@ -546,49 +523,6 @@ function TemplateCard({ tpl, expanded, onToggle, onSave, onDelete, readOnly = fa
                 />
               </div>
 
-              {/* Marca */}
-              {showBrandField && (
-                <div>
-                  <label style={S.label}>Marca</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {(
-                      [
-                        { value: 'ambas', label: 'Ambas' },
-                        { value: 'elo-editora', label: 'Elo Editora' },
-                        { value: 'perabook', label: 'PeraBook' },
-                      ] as { value: MarketingTaskTemplate['brandScope']; label: string }[]
-                    ).map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setDraft((d) => ({ ...d, brandScope: value }))}
-                        style={{
-                          flex: '1 1 80px',
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                          fontSize: 12.5,
-                          fontWeight: 600,
-                          fontFamily: 'inherit',
-                          border:
-                            draft.brandScope === value
-                              ? '2px solid var(--eh-text-strong)'
-                              : '2px solid var(--eh-border)',
-                          background:
-                            draft.brandScope === value ? 'var(--eh-surface)' : 'var(--eh-bg)',
-                          color:
-                            draft.brandScope === value
-                              ? 'var(--eh-text-strong)'
-                              : 'var(--eh-text-2)',
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Checklist */}
               <div>
                 <label style={S.label}>Itens de checklist (um por linha)</label>
@@ -633,14 +567,11 @@ interface NewTemplateModalProps {
   onClose: () => void
   onCreate: (tpl: Omit<MarketingTaskTemplate, 'id'>) => Promise<void>
   bucketNames: string[]
-  /** ELO-3201 — ver comentário em `TemplateCardProps.showBrandField`. */
-  showBrandField?: boolean
 }
 
-function NewTemplateModal({ onClose, onCreate, bucketNames, showBrandField = true }: NewTemplateModalProps) {
+function NewTemplateModal({ onClose, onCreate, bucketNames }: NewTemplateModalProps) {
   const [name, setName] = useState('')
   const [categorias, setCategorias] = useState<string[]>([])
-  const [brandScope, setBrandScope] = useState<MarketingTaskTemplate['brandScope']>('ambas')
   const [checklistText, setChecklistText] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -665,7 +596,7 @@ function NewTemplateModal({ onClose, onCreate, bucketNames, showBrandField = tru
 
     setSaving(true)
     try {
-      await onCreate({ name: trimmedName, categorias, brandScope, checklist, isDefault: false })
+      await onCreate({ name: trimmedName, categorias, checklist, isDefault: false })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar template.')
@@ -780,45 +711,6 @@ function NewTemplateModal({ onClose, onCreate, bucketNames, showBrandField = tru
             <CategorySelector selected={categorias} onChange={setCategorias} knownCategories={bucketNames} />
           </div>
 
-          {showBrandField && (
-            <div>
-              <label style={S.label}>Marca</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(
-                  [
-                    { value: 'ambas', label: 'Ambas' },
-                    { value: 'elo-editora', label: 'Elo Editora' },
-                    { value: 'perabook', label: 'PeraBook' },
-                  ] as { value: MarketingTaskTemplate['brandScope']; label: string }[]
-                ).map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setBrandScope(value)}
-                    style={{
-                      flex: '1 1 80px',
-                      padding: '9px 12px',
-                      borderRadius: 9,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontFamily: 'inherit',
-                      border:
-                        brandScope === value
-                          ? '2px solid var(--eh-text-strong)'
-                          : '2px solid var(--eh-border)',
-                      background: brandScope === value ? 'var(--eh-surface)' : 'var(--eh-bg)',
-                      color:
-                        brandScope === value ? 'var(--eh-text-strong)' : 'var(--eh-text-2)',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div>
             <label style={S.label} htmlFor="new-tpl-checklist">
               Itens de checklist{' '}
@@ -909,8 +801,8 @@ function NavButton({ label, active, onClick }: { label: string; active: boolean;
 // ── Página principal ──────────────────────────────────────────────────────────
 
 /**
- * Base de rota e título default por área (ELO-2936, com Pedagogia na
- * ELO-3182). `area` default `'marketing'` preserva o comportamento desta
+ * Base de rota e título default por área (
+ *). `area` default `'marketing'` preserva o comportamento desta
  * tela para quem já a usa — Administrativo/Pedagogia passam
  * `area="administrativo"`/`area="pedagogia"` via router.
  */
@@ -934,13 +826,13 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const navBase = NAV_BASE[area]
-  // ELO-2044: audit log das acoes humanas desta tela. Template nao
+  // Audit log das acoes humanas desta tela. Template nao
   // pertence a um projeto — `projectId` vazio o mantem fora do filtro
   // por projeto, mas visivel no filtro por area.
   const audit = usePmAudit(area, null, '')
   const { roleLevel, canWriteScreen } = useRole()
-  // ELO-1954: Viewer só pode ler templates — sem criar, editar ou remover.
-  // ELO-2214: exceção por tela precisa afetar a escrita, não só a visibilidade.
+  // Viewer só pode ler templates — sem criar, editar ou remover.
+  // Exceção por tela precisa afetar a escrita, não só a visibilidade.
   const canWrite = canWriteScreen()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [projectTitle, setProjectTitle] = useState(DEFAULT_TITLE[area])
@@ -952,7 +844,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
   const [showNewModal, setShowNewModal] = useState(false)
 
   useEffect(() => {
-    // ELO-2936: para 'marketing' resolve exatamente como antes (via
+    // Para 'marketing' resolve exatamente como antes (via
     // `getMarketingProject` dentro de `getOrCreateAreaProject`); para
     // 'administrativo' cria o projeto singleton na 1ª visita (idempotente).
     void getOrCreateAreaProject(area).then((proj) => {
@@ -972,7 +864,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
 
   useEffect(() => {
     setLoading(true)
-    const unsub = subscribeAreaTemplates(area, (loaded) => {
+    const unsub = subscribeTemplates((loaded) => {
       // Seed automático e migração de categoria legada são conteúdo
       // específico de Marketing — Administrativo nasce sem templates.
       if (area === 'marketing') {
@@ -1005,7 +897,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
   }
 
   async function handleCreate(data: Omit<MarketingTaskTemplate, 'id'>) {
-    await createMarketingTemplate({ ...data, area })
+    await createMarketingTemplate(data)
     audit.logTemplate('pm_template.create', { id: data.name, name: data.name })
   }
 
@@ -1047,7 +939,6 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
             e criavam scroll horizontal global (mesmo tratamento do Calendário). */}
         <div style={{ display: 'flex', gap: 4, overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? 2 : undefined }}>
           <NavButton label="Quadro" active={false} onClick={() => navigate(`${navBase}/quadro`)} />
-          <NavButton label="Grade" active={false} onClick={() => navigate(`${navBase}/grade`)} />
           <NavButton label="Calendário" active={false} onClick={() => navigate(`${navBase}/calendario`)} />
           {canSeeTemplates && (
             <NavButton label="Templates" active={true} onClick={() => undefined} />
@@ -1199,7 +1090,6 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
               onDelete={handleDelete}
               readOnly={!canWrite}
               bucketNames={bucketNames}
-              showBrandField={area !== 'pedagogia'}
             />
           ))}
 
@@ -1228,7 +1118,6 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
               onDelete={handleDelete}
               readOnly={!canWrite}
               bucketNames={bucketNames}
-              showBrandField={area !== 'pedagogia'}
             />
           ))}
         </div>
@@ -1240,7 +1129,6 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
           onClose={() => setShowNewModal(false)}
           onCreate={handleCreate}
           bucketNames={bucketNames}
-          showBrandField={area !== 'pedagogia'}
         />
       )}
       </div>

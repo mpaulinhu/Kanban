@@ -3,19 +3,16 @@
 /* =============================================================================
    Kanban — tokens de estilo
 
-   Extraído de `apps/corehub/src/styles/globals.css` (CoreHub). Os valores dos
-   tokens `--eh-pm-*` foram amostrados por pixel de capturas autenticadas do
-   board real do Trello — os comentários que explicam cada medição foram
-   preservados, porque são a justificativa de cada número e a razão de não os
-   "arredondarmos" para uma escala genérica.
+   Os valores dos tokens `--eh-pm-*` foram amostrados por pixel a partir de
+   capturas de referência, e os comentários que explicam cada medição de
+   contraste são a justificativa de cada número — a razão de não os
+   "arredondarmos" para uma escala genérica. Ao mexer num par de cores, refaça
+   a medição nos dois temas.
 
-   Diferença deliberada em relação ao CoreHub: os tokens semânticos do Tailwind
-   (--primary, --ring, --input, --destructive, --accent) são DEFINIDOS aqui. No
-   CoreHub eles não existem (nem no `globals.css`, nem no pacote
-   `@grupo-elo-editorial/design-tokens`), então classes como `bg-primary`,
-   `ring-ring` e `border-input` — usadas à larga no modal de detalhe — hoje
-   renderizam sem cor lá. Mapeando-os para a paleta `--eh-*`, o modal fica
-   visualmente correto aqui sem precisar reescrever as classes.
+   Os tokens semânticos do Tailwind (--primary, --ring, --input, --destructive,
+   --accent) são DEFINIDOS aqui e mapeados para a paleta `--eh-*`. Sem isso,
+   classes como `bg-primary`, `ring-ring` e `border-input` — usadas à larga no
+   modal de detalhe — renderizariam sem cor.
    ============================================================================= */
 
 @theme {
@@ -66,9 +63,9 @@
   --eh-danger-border: #fecaca;
 
   /* Paleta de etiquetas — pares fg/bg fixos, ⩾4,5:1. Nunca usar hex cru de
-     fonte externa (ex.: cores do Trello) direto num chip: os pares abaixo
-     existem porque o hex original reprova AA. `label-neutral` é o fallback
-     para qualquer cor de origem sem par mapeado. */
+     fonte externa direto num chip: os pares abaixo existem porque hex
+     arbitrários reprovam AA. `label-neutral` é o fallback para qualquer cor de
+     origem sem par mapeado. */
   --eh-label-green-bg: #dcf5e4;
   --eh-label-green-fg: #187a43;
   --eh-label-blue-bg: #dbe9fb;
@@ -89,10 +86,9 @@
   --eh-label-neutral-fg: var(--eh-text-3);
 
   /* Variante "solid" das etiquetas — barra colorida sólida no topo do card,
-     estilo Trello, com o nome escrito dentro (WCAG 2.2 AA 1.4.1 — cor nunca
-     é o único portador de informação). Fundos AMOSTRADOS por pixel de uma
-     captura autenticada do board real. `-solid-fg` escolhido por medição
-     individual, ⩾4,5:1 sempre:
+     com o nome escrito dentro (WCAG 2.2 AA 1.4.1 — cor nunca é o único
+     portador de informação). Fundos AMOSTRADOS por pixel de capturas de
+     referência. `-solid-fg` escolhido por medição individual, ⩾4,5:1 sempre:
      green #4bce97/#0b3b26 6.34:1 · yellow #eed12b/#4d3800 7.33:1 ·
      blue #1868db/branco 5.20:1 · pink #ae4787/branco 5.18:1 ·
      red #c9372c/branco 5.16:1 · purple #cd8de5/#3d1a4d 5.87:1 ·
@@ -116,8 +112,8 @@
   --eh-label-neutral-solid-bg: var(--eh-muted-2);
   --eh-label-neutral-solid-fg: #ffffff;
 
-  /* Fundo do quadro estilo Trello — gradiente diagonal amostrado por pixel de
-     uma captura autenticada: canto superior-esquerdo rgb(24,101,70)=#186546
+  /* Fundo do quadro — gradiente diagonal amostrado por pixel de uma captura
+     de referência: canto superior-esquerdo rgb(24,101,70)=#186546
      (verde escuro) → canto inferior-direito rgb(95,197,208)=#5fc5d0
      (turquesa claro). Não é cor chapada — ~6 pontos amostrados confirmaram
      progressão diagonal, não um degradê vertical simples. */
@@ -126,7 +122,7 @@
   --eh-pm-board-column-bg: rgb(241, 242, 244);
   /* Cabeçalho de coluna E título do card. Medindo o pixel MAIS ESCURO — o
      núcleo da letra, não a média que inclui as bordas anti-serrilhadas, que
-     puxam a amostra pro claro — o Trello usa #292a2e. 13,9:1 sobre branco. */
+     puxam a amostra pro claro. 13,9:1 sobre branco. */
   --eh-pm-board-column-header-fg: #292a2e;
   --eh-pm-card-title-fg: #292a2e;
   /* Alias geral pro MESMO tom escuro acima — todo texto "de leitura" do
@@ -162,6 +158,14 @@
   --eh-pm-header-surface: rgba(0, 0, 0, 0.15);
   --eh-pm-header-surface-active: rgba(0, 0, 0, 0.25);
   --eh-pm-header-border: rgba(255, 255, 255, 0.25);
+
+  /* Alça da barra de rolagem da coluna — translúcida para servir as 8 cores
+     de coluna sem uma regra por cor. Ver `.eh-pm-task-list`. */
+  --eh-pm-scroll-thumb: rgba(0, 0, 0, 0.26);
+  --eh-pm-scroll-thumb-hover: rgba(0, 0, 0, 0.4);
+  /* Realce de hover sobre a coluna. Mesma razão de ser translúcido: escurece
+     a cor que estiver embaixo, em vez de impor um cinza. */
+  --eh-pm-hover-overlay: rgba(0, 0, 0, 0.1);
 
   --eh-toast-bg: #1f2a27;
   --eh-toast-fg: #eef2f1;
@@ -207,6 +211,11 @@
   --eh-danger-fg: #f87171;
   --eh-danger-border: #5c2a2a;
 
+  /* Claro translúcido: no tema escuro a alça preta desapareceria no fundo. */
+  --eh-pm-scroll-thumb: rgba(255, 255, 255, 0.24);
+  --eh-pm-scroll-thumb-hover: rgba(255, 255, 255, 0.38);
+  --eh-pm-hover-overlay: rgba(255, 255, 255, 0.12);
+
   --eh-pm-board-bg: linear-gradient(135deg, #0d2e21 0%, #17564c 55%, #276e69 100%);
   --eh-pm-board-column-bg: rgba(38, 54, 63, 0.8);
   --eh-pm-board-column-header-fg: #e6edf0;
@@ -242,12 +251,65 @@ body {
   border-color: var(--eh-pm-header-border);
 }
 
-/* "Nova coluna" — branco translúcido sobre o gradiente, como o "Adicionar
-   outra lista" do Trello. O `!important` é necessário, não descuido: o
+/* "Nova coluna" — branco translúcido sobre o gradiente do quadro.
+   O `!important` é necessário, não descuido: o
    `background` de repouso é declarado INLINE (depende de runtime), e estilo
    inline vence qualquer seletor de classe. */
 .eh-pm-add-column:hover {
   background: rgba(255, 255, 255, 0.34) !important;
+}
+
+/* Barra de rolagem da lista de tarefas. Sem isto o navegador desenha a barra
+   padrão — trilho branco/cinza-claro — que aparecia como uma faixa clara
+   colada na borda direita quando a coluna recebe uma cor de fundo.
+
+   Preto translúcido em vez de um token de cor: a mesma regra serve as 8 cores
+   de coluna e os dois temas, escurecendo o que estiver por baixo em vez de
+   assumir um fundo. `transparent` no trilho deixa a cor da coluna passar. */
+.eh-pm-task-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--eh-pm-scroll-thumb) transparent;
+}
+.eh-pm-task-list::-webkit-scrollbar {
+  width: 8px;
+}
+.eh-pm-task-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.eh-pm-task-list::-webkit-scrollbar-thumb {
+  background-color: var(--eh-pm-scroll-thumb);
+  border-radius: 4px;
+}
+.eh-pm-task-list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--eh-pm-scroll-thumb-hover);
+}
+
+/* Botão "⋯" do cabeçalho da coluna. Preto translúcido em vez de um cinza fixo
+   (`--eh-border`): assim o hover é sempre um tom mais escuro do PRÓPRIO fundo
+   da coluna, funcionando igual nas 8 cores em vez de só no cinza padrão.
+   `!important` porque o `background` de repouso é declarado inline. */
+.eh-pm-col-menu-btn:hover {
+  background: var(--eh-pm-hover-overlay) !important;
+}
+
+/* Rolagem horizontal do quadro. Aqui o fundo é sempre o gradiente escuro do
+   board (não a cor da coluna), então a alça é clara nos dois temas. */
+.eh-pm-board-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+.eh-pm-board-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+.eh-pm-board-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.eh-pm-board-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+}
+.eh-pm-board-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.45);
 }
 
 /* Botões do cabeçalho. Repouso sem fundo/borda (`transparent` explícito

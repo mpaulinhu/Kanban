@@ -1,9 +1,8 @@
 /**
- * Substitui o RBAC do CoreHub (4 tabelas de permissão, ~665 linhas) por um
- * modelo aberto: neste app todo usuário edita.
+ * Modelo de permissão aberto: neste app todo usuário edita.
  *
- * A superfície é a mesma que os componentes já consomem (`canWriteScreen`,
- * `roleLevel`, ...), então reintroduzir níveis depois é trocar este arquivo,
+ * A superfície (`canWriteScreen`, `roleLevel`, ...) é a que os componentes já
+ * consomem, então introduzir níveis de acesso depois é trocar este arquivo,
  * sem tocar nas telas.
  */
 export function useRole() {
@@ -13,6 +12,5 @@ export function useRole() {
     can: () => true,
     canViewScreen: () => true,
     canWriteScreen: () => true,
-    canDownloadAcervo: () => true,
   }
 }

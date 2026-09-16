@@ -45,12 +45,12 @@ export function AssigneeAvatars({
   onAvatarClick,
 }: {
   names: string[]
-  /** Foto de perfil por assignee, no mesmo índice de `names` (ELO-2661). Entrada ausente/undefined cai no fallback de iniciais. */
+  /** Foto de perfil por assignee, no mesmo índice de `names`. Entrada ausente/undefined cai no fallback de iniciais. */
   photoURLs?: (string | undefined)[]
   max?: number
   size?: number
   /**
-   * Torna cada avatar clicável (ELO-3183) — recebe o índice em `names` e o
+   * Torna cada avatar clicável — recebe o índice em `names` e o
    * próprio elemento, para o chamador ancorar um popover de perfil nele.
    * Ausente = avatares seguem decorativos, sem mudança de comportamento
    * (é o caso das duas visões da Grade do Marketing).

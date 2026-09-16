@@ -113,10 +113,9 @@ export function StartDateToast({
 }
 
 /**
- * Toast genérico de confirmação de ação, com botão opcional de desfazer
- * (ELO-3182 — correção do gate ux-ui-reviewer: "Tarefa arquivada"/"Tarefa
- * desarquivada" sem feedback nenhum era indistinguível de exclusão ou erro
- * silencioso). Mesmo padrão visual/acessível de `StartDateToast`
+ * Toast genérico de confirmação de ação, com botão opcional de desfazer.
+ * Existe porque uma ação como arquivar sem nenhum feedback é indistinguível
+ * de exclusão ou de erro silencioso. Mesmo padrão visual/acessível de `StartDateToast`
  * (`role="status"`, `aria-live="polite"`, portal, barra de progresso) —
  * generalizado para não duplicar o esqueleto por caso de uso.
  *

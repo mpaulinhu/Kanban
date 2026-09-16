@@ -1,7 +1,7 @@
 /**
- * Versão em memória do `marketingPlannerApi` do CoreHub — mesmas assinaturas
- * públicas, sem Firestore. As funções `subscribe*` devolvem `Unsubscribe` e
- * reagem a toda mutação através do emissor do `store.ts`.
+ * API de quadros/colunas/tarefas sobre o estado em memória. As funções
+ * `subscribe*` devolvem `Unsubscribe` e reagem a toda mutação através do
+ * emissor do `store.ts`.
  */
 
 import type {
@@ -620,14 +620,12 @@ export async function deleteChecklistItem(
 
 // ── Templates ────────────────────────────────────────────────────────────────
 
-export function subscribeAreaTemplates(
-  area: TemplateArea,
+export function subscribeTemplates(
   cb: (templates: MarketingTaskTemplate[]) => void,
 ): Unsubscribe {
   return subscribeSelector(
     (s) =>
       s.templates
-        .filter((t) => (t.area ?? 'marketing') === area)
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
         .map((t) => ({ ...t })),
@@ -686,8 +684,7 @@ export async function createPMOfficeLabel(
   data: {
     name: string | null
     displayName: string
-    trelloLabelId?: string | null
-    trelloColor?: string | null
+    colorKey?: string | null
     order: number
   },
 ): Promise<string> {
@@ -698,8 +695,7 @@ export async function createPMOfficeLabel(
       id,
       name: data.name,
       displayName: data.displayName,
-      trelloLabelId: data.trelloLabelId ?? null,
-      trelloColor: data.trelloColor ?? null,
+      colorKey: data.colorKey ?? null,
       order: data.order,
       mergedInto: null,
       createdAt: tsNow(),
@@ -712,7 +708,7 @@ export async function createPMOfficeLabel(
 export async function updatePMOfficeLabel(
   projectId: string,
   labelId: string,
-  data: Partial<Pick<PMOfficeLabel, 'name' | 'displayName' | 'trelloColor' | 'order' | 'mergedInto'>>,
+  data: Partial<Pick<PMOfficeLabel, 'name' | 'displayName' | 'colorKey' | 'order' | 'mergedInto'>>,
 ): Promise<void> {
   mutate((draft) => {
     if (draft.project.id !== projectId) return

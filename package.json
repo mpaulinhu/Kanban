@@ -2,6 +2,7 @@
   "name": "kanban",
   "version": "0.1.0",
   "private": true,
+  "description": "Quadro de tarefas para equipes: colunas, cards, etiquetas, checklists e calendário.",
   "type": "module",
   "scripts": {
     "dev": "vite",

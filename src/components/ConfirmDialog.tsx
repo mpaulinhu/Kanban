@@ -1,20 +1,17 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * Diálogo de confirmação genérico (ELO-3200, redesign) — substitui
- * `window.confirm` em ações sensíveis (excluir tarefa, subtarefa, etiqueta,
- * usuário). Usado em ~22 lugares do CoreHub — este componente é
- * compartilhado; qualquer mudança aqui aparece em todos eles junto.
+ * Diálogo de confirmação genérico — substitui `window.confirm` em ações
+ * sensíveis (excluir tarefa, subtarefa, etiqueta, usuário). É compartilhado
+ * por várias telas; qualquer mudança aqui aparece em todas elas junto.
  *
- * Pedido do Marcos ao testar o checklist de subtarefas da Pedagogia: "mais
- * moderno e minimalista". Ícone de alerta num círculo colorido (padrão de
- * diálogo de exclusão consolidado — dá pra reconhecer "isso é destrutivo"
- * antes mesmo de ler o texto) substitui o bloco de texto plano anterior.
+ * O ícone de alerta num círculo colorido não é enfeite: é o padrão consolidado
+ * de diálogo destrutivo, que deixa reconhecer "isso apaga algo" antes mesmo de
+ * ler o texto.
  *
- * Também remove a dependência de `Button` de `@grupo-elo-editorial/
- * shared-ui-react` — era o único uso desse componente aqui, e o botão local
- * usa os mesmos tokens `--eh-*` do resto do CoreHub em vez do visual do
- * pacote externo.
+ * Os botões são locais e usam os tokens `--eh-*` do app, em vez de vir de uma
+ * biblioteca de componentes externa — mantém o diálogo consistente com o
+ * restante da UI sem arrastar uma dependência só por causa dele.
  */
 
 type Variant = 'danger' | 'primary'
@@ -112,7 +109,7 @@ export function ConfirmDialog({
   variant?: 'danger' | 'primary'
   loading: boolean
   /**
-   * ELO-2978: mensagem de falha da ação confirmada. Opcional — os usos que
+   * Mensagem de falha da ação confirmada. Opcional — os usos que
    * não a passam seguem idênticos. Quando presente, o diálogo continua aberto
    * mostrando o motivo, em vez de fechar como se a ação tivesse funcionado.
    */
@@ -123,10 +120,9 @@ export function ConfirmDialog({
   onConfirm: () => void
 }) {
   const icon = VARIANT_ICON_STYLE[variant]
-  // ELO-3111 (achado do ux-ui-reviewer, resolvido de passagem aqui já que o
-  // componente inteiro foi reescrito): Escape fecha, e o backdrop NÃO fecha
-  // durante `loading` — clicar fora enquanto a exclusão está em andamento
-  // parecia cancelar a ação, mas a request já tinha sido disparada.
+  // Escape fecha, mas o backdrop NÃO fecha durante `loading`: clicar fora
+  // enquanto a exclusão está em andamento parecia cancelar a ação, quando na
+  // verdade ela já tinha sido disparada.
   const dialogRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -182,7 +178,7 @@ export function ConfirmDialog({
           {title}
         </h2>
         <p className="mt-1.5 text-sm" style={{ color: 'var(--eh-text-2)', lineHeight: 1.5 }}>{message}</p>
-        {/* ELO-2978: role="alert" — a mensagem surge sem mover o foco. */}
+        {/* Role="alert" — a mensagem surge sem mover o foco. */}
         {error && (
           <div
             role="alert"

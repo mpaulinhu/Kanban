@@ -5,7 +5,7 @@ import { COLOR_KEY_LABEL_PT, CREATABLE_LABEL_COLORS, labelSolidColorTokens, norm
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 /**
- * Popover de seleção/edição de etiquetas (ELO-3182) — ancorado no botão `+`
+ * Popover de seleção/edição de etiquetas — ancorado no botão `+`
  * ao lado de "Etiquetas" no modal de detalhe, área Pedagogia. Marcar/
  * desmarcar associa/desassocia a etiqueta na tarefa (grava via
  * `onToggleLabel`, que por sua vez chama `setPMTaskLabel`); "Criar uma nova
@@ -13,15 +13,14 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
  * `marketingPlannerApi.ts` (`createPMOfficeLabel`/`updatePMOfficeLabel`) —
  * só faltava a associação em si, que é o que este componente resolve.
  *
- * Acessibilidade (mesmo padrão de `PlannerBucketTree.tsx`/
- * `LabelFilterDropdown.tsx`, já aprovado pelo gate ux-ui-reviewer):
+ * Acessibilidade (mesmo padrão de `LabelFilterDropdown.tsx`):
  * `role="dialog"` + `aria-label`, `aria-haspopup`/`aria-expanded` no botão
  * que abre, Escape fecha e devolve foco ao botão, `createPortal` pro body
  * (o modal pai tem `overflow-hidden`, cortaria o popover).
  *
- * Fora de escopo por decisão do Marcos: "Mostrar mais etiquetas"
- * (paginação — sem volume que justifique) e "Habilitar modo daltonismo"
- * (o nosso já mostra nome sempre, decisão do gate de UX na ELO-3182).
+ * Deliberadamente fora: paginação de etiquetas (não há volume que justifique)
+ * e um "modo daltonismo" — o chip já mostra o nome sempre, então a cor nunca é
+ * o único portador de informação.
  */
 export function LabelPickerPopover({
   anchorRef,
@@ -41,18 +40,18 @@ export function LabelPickerPopover({
   onToggleLabel: (labelId: string, checked: boolean) => Promise<void>
   /** Cria uma etiqueta nova — `color` é a chave conhecida (`'green'`...) ou `null` (sem cor, mesmo fallback neutro do resto do app). */
   onCreateLabel: (name: string, color: KnownColorKey | null) => Promise<void>
-  /** Edita nome E cor de uma etiqueta existente numa escrita só (reaproveita a mesma vista de criação — pedido do Marcos, "se sair barato"). */
+  /** Edita nome E cor de uma etiqueta existente numa escrita só — reaproveita a mesma vista usada na criação. */
   onEditLabel: (labelId: string, name: string, color: KnownColorKey | null) => Promise<void>
 }) {
   const [query, setQuery] = useState('')
   // `maxH`: altura máxima calculada a partir do espaço real disponível na
   // janela — sem isso o popover estourava a borda inferior e cortava a lista.
   const [pos, setPos] = useState<{ top: number; left: number; maxH: number } | null>(null)
-  // Vista "Criar Etiqueta" do Trello (ELO-3182) reaproveitada pra criar E
-  // editar (mesmo formulário: nome + cor) — `editorTarget: null` = criando
-  // nova, `editorTarget: labelId` = editando a etiqueta com esse id. Uma
-  // segunda vista DENTRO do mesmo popover (não um popover novo), com `‹`
-  // voltando pra lista — como no Trello.
+  // Uma única vista "Criar Etiqueta" serve pra criar E editar (mesmo
+  // formulário: nome + cor) — `editorTarget: null` = criando nova,
+  // `editorTarget: labelId` = editando a etiqueta com esse id. É uma segunda
+  // vista DENTRO do mesmo popover (não um popover novo), com `‹` voltando
+  // pra lista.
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorTarget, setEditorTarget] = useState<string | null>(null)
   const [editorName, setEditorName] = useState('')
@@ -64,7 +63,7 @@ export function LabelPickerPopover({
   const editorNameRef = useRef<HTMLInputElement>(null)
   const titleId = useId()
 
-  // Responsivo (ELO-3182): em telas estreitas (~390px) o popover ancorado no
+  // Responsivo: em telas estreitas (~390px) o popover ancorado no
   // botão + 320px fixos deixaria pouquíssima margem. Em vez disso, no
   // mobile ele vira um "modal" centralizado na tela (mesmo componente,
   // largura fluida `calc(100vw - 24px)`, posição fixa central) — mesmo
@@ -116,7 +115,7 @@ export function LabelPickerPopover({
     const EDGE = 12
 
     // Alinhado à esquerda do botão, puxado pra dentro se estourar a direita —
-    // mesma técnica de PlannerBucketTree.tsx.
+    // técnica padrão de clamp de popover na viewport.
     const left = Math.max(GAP, Math.min(rect.left, window.innerWidth - POPOVER_W - GAP))
 
     // Posicionamento vertical: abrir pra baixo cegamente cortava a lista e o
@@ -209,7 +208,7 @@ export function LabelPickerPopover({
   function openEditEditor(label: PMOfficeLabel) {
     setEditorTarget(label.id)
     setEditorName(label.displayName)
-    setEditorColor(normalizeLabelColorKey(label.trelloColor))
+    setEditorColor(normalizeLabelColorKey(label.colorKey))
     setActionError(null)
     setEditorOpen(true)
   }
@@ -222,8 +221,8 @@ export function LabelPickerPopover({
 
   /**
    * Salva a vista de criar/editar — chama `onCreateLabel` ou `onEditLabel`
-   * conforme `editorTarget`. Nome vazio é permitido (etiqueta sem nome, igual
-   * às importadas do Trello sem nome original) — só a AÇÃO de salvar precisa
+   * conforme `editorTarget`. Nome vazio é permitido (etiqueta sem nome) — só
+   * a AÇÃO de salvar precisa
    * de uma cor OU nome pra fazer sentido; ver `canSaveEditor` no render.
    */
   async function handleSaveEditor() {
@@ -278,8 +277,8 @@ export function LabelPickerPopover({
         }}
       >
       {editorOpen ? (
-        /* Vista "Criar Etiqueta" do Trello (ELO-3182), reaproveitada pra
-           editar — `‹` volta pra lista sem gravar nada. */
+        /* Vista "Criar Etiqueta", reaproveitada pra editar —
+           `‹` volta pra lista sem gravar nada. */
         <>
           <div className="flex items-center justify-center relative p-3" style={{ borderBottom: '1px solid var(--eh-border)' }}>
             <button
@@ -329,7 +328,7 @@ export function LabelPickerPopover({
               </div>
             </div>
             <div>
-              {/* ELO-3182 (correção de contraste): rótulos de campo aqui
+              {/* (correção de contraste): rótulos de campo aqui
                   usavam --eh-text-2 (4,88:1 sobre --eh-surface branco) —
                   trocados pra --eh-pm-modal-text (14,34:1), mesmo padrão do
                   restante do modal ("MEMBROS"/"ETIQUETAS" etc.). */}
@@ -348,11 +347,11 @@ export function LabelPickerPopover({
             </div>
             <div>
               <p className="text-xs font-semibold mb-1" style={{ color: 'var(--eh-pm-modal-text)' }}>Selecionar uma cor</p>
-              {/* Grade de 8 cores (não 30, como o Trello) — exatamente as que
-                  têm par --eh-label-*-solid-bg/-fg medido em contraste AA nos
-                  dois temas (ver labelColors.ts). 4 por linha, `<button>`
-                  reais (não `<div onClick>` — o gate de UX já reprovou isso
-                  antes) navegáveis por Tab, foco visível via outline nativo.
+              {/* Grade de cores — exatamente as que têm par
+                  --eh-label-*-solid-bg/-fg medido em contraste AA nos dois
+                  temas (ver labelColors.ts). 4 por linha, `<button>` reais
+                  (nunca `<div onClick>`) navegáveis por Tab, foco visível via
+                  outline nativo.
                   aria-label com o nome da cor por extenso: cor não pode ser o
                   único identificador (WCAG 2.2 AA 1.4.1), mesmo numa grade de
                   amostras de cor pura. */}
@@ -398,7 +397,7 @@ export function LabelPickerPopover({
                   "Remover cor" separado (decisão registrada: mais claro que
                   a ausência de cor é uma OPÇÃO na mesma grade, não uma ação
                   distinta — e `labelColorTokens`/`labelSolidColorTokens` já
-                  caem no fallback neutro quando `trelloColor` é null, então
+                  caem no fallback neutro quando `colorKey` é null, então
                   não precisa de um caminho de dado diferente). */}
               <button
                 type="button"
@@ -427,10 +426,9 @@ export function LabelPickerPopover({
           <div className="p-3" style={{ borderTop: '1px solid var(--eh-border)' }}>
             {/* Decisão registrada: "Criar"/"Salvar" NÃO fica desabilitado sem
                 cor escolhida. "Sem cor" é uma opção explícita e válida na
-                própria grade (9ª amostra) — não é "ainda não escolheu", e o
-                próprio Trello permite etiqueta sem cor. Bloquear aqui
-                obrigaria escolher uma cor pra algo que nem o produto
-                original exige. Só bloqueia durante o próprio salvamento
+                própria grade (9ª amostra) — não é "ainda não escolheu".
+                Bloquear aqui obrigaria escolher uma cor pra algo que não
+                precisa de cor. Só bloqueia durante o próprio salvamento
                 (`pendingId`), pra evitar duplo-clique. */}
             <button
               type="button"
@@ -474,7 +472,7 @@ export function LabelPickerPopover({
               <p className="text-xs text-center py-4" style={{ color: 'var(--eh-muted-2)' }}>Nenhuma etiqueta encontrada.</p>
             )}
             {visibleLabels.map((label) => {
-              const { bg, fg } = labelSolidColorTokens(label.trelloColor)
+              const { bg, fg } = labelSolidColorTokens(label.colorKey)
               const checked = selectedIds.includes(label.id)
               return (
                 <div key={label.id} className="flex items-center gap-2">

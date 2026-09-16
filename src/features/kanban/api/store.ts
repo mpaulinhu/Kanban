@@ -1,5 +1,5 @@
 /**
- * Repositório em memória que substitui o Firestore/Storage do CoreHub.
+ * Repositório em memória do quadro, persistido em `localStorage`.
  *
  * Três responsabilidades, deliberadamente juntas num arquivo só porque são
  * indissociáveis: (1) o substituto de `Timestamp`, (2) o estado do quadro com
@@ -7,6 +7,7 @@
  * `subscribe*`. Separá-las exigiria import circular entre os três módulos.
  */
 
+import { DEMO_USER } from '@/providers/AuthProvider'
 import type {
   MarketingTaskTemplate,
   PMBucket,
@@ -19,7 +20,7 @@ import type {
 // ── Timestamp ────────────────────────────────────────────────────────────────
 
 /**
- * Substituto mínimo do `Timestamp` do Firestore. Os componentes copiados leem
+ * Tipo mínimo de data/hora usado em todo o estado. Os componentes leem
  * `.seconds` (via `toDate()` de `utils/index.ts`) e `applyLazyOverdueTransition`
  * chama `.toMillis()`; `Timestamp.fromDate` é usado por `dateToTs` no
  * `TaskDetailModal`. Nada além disso é consumido, então nada além disso existe.
@@ -86,16 +87,19 @@ export interface DemoUser {
 }
 
 /**
- * Sem autenticação: toda escrita que no original carrega o uid do usuário
- * logado (autor de comentário, checagem de `canEditComment`) usa este.
- * `roleLevel: 2` = `admin` na hierarquia do monorepo — o bastante para exercer
- * o ramo admin de `canDeleteComment` sem ser `super_admin`.
+ * Quem "assina" toda escrita que precisa de um autor (comentário novo, checagem
+ * de quem pode editar ou apagar).
+ *
+ * Deriva de `DEMO_USER` em vez de repetir os valores: enquanto não há login, os
+ * dois precisam ser a MESMA pessoa. Quando eram objetos separados, o app dizia
+ * que você era um usuário e assinava seus comentários como outro, e a checagem
+ * de "posso editar este comentário?" nunca batia.
  */
 export const CURRENT_USER: DemoUser = {
-  uid: 'demo-user-ana',
-  name: 'Ana Beatriz Moreira',
-  email: 'ana.moreira@exemplo.com.br',
-  roleLevel: 2,
+  uid: DEMO_USER.uid,
+  name: DEMO_USER.displayName,
+  email: DEMO_USER.email,
+  roleLevel: DEMO_USER.roleLevel,
 }
 
 // ── Formato persistido ───────────────────────────────────────────────────────
@@ -118,7 +122,12 @@ export interface KanbanState {
   attachmentBlobs: Record<string, AttachmentBlob>
 }
 
-const STORAGE_KEY = 'kanban.demo.state.v1'
+// v2: mudança de schema nos dados de exemplo (`trelloColor`→`colorKey`,
+// remoção dos campos de livro/marca) — sem isso, quem já tinha o v1 salvo
+// carregava etiquetas com `colorKey` ausente e via tudo cinza, porque o
+// estado persistido nunca é migrado campo a campo, só descartado quando a
+// versão muda.
+const STORAGE_KEY = 'kanban.demo.state.v2'
 
 // ── Emissor ──────────────────────────────────────────────────────────────────
 
@@ -128,10 +137,10 @@ const listeners = new Set<Listener>()
 let notifyScheduled = false
 
 /**
- * Entrega assíncrona (microtask) para imitar o Firestore: o callback de um
- * `onSnapshot` nunca roda dentro do mesmo tick da mutação, e componentes React
- * assumem isso (um `setState` síncrono dentro do próprio handler de clique que
- * disparou a escrita produziria ordem de render diferente da produção).
+ * Entrega assíncrona (microtask), nunca síncrona: o callback do assinante não
+ * pode rodar no mesmo tick da mutação. Um `setState` síncrono dentro do próprio
+ * handler de clique que disparou a escrita produziria ordem de render diferente
+ * — os componentes assumem a entrega adiada.
  * Coalescido: várias mutações no mesmo tick acordam os assinantes uma vez só.
  */
 function notify(): void {
@@ -177,8 +186,6 @@ const TASK_DATE_FIELDS = [
   'startDate',
   'completedAt',
   'archivedAt',
-  'trelloParsedDate',
-  'trelloDateEnd',
 ] as const
 
 function reviveState(parsed: KanbanState): KanbanState {

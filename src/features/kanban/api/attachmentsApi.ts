@@ -1,14 +1,14 @@
 /**
- * Anexos sem Storage. A validação (allowlist de mimetype + teto de 20 MB) e a
- * desambiguação de nome são a lógica REAL copiada do CoreHub — só a gravação
- * do binário muda: o arquivo vira uma `data:` URL guardada no store, indexada
- * pelo mesmo `storagePath` convencional do original.
+ * Anexos sem servidor de arquivos: validação (allowlist de mimetype + teto de
+ * 20 MB) e desambiguação de nome acontecem aqui, e o binário vira uma `data:`
+ * URL guardada no store, indexada por um `storagePath` convencional — o mesmo
+ * caminho que um backend de arquivos usaria.
  */
 
 import type { PMTaskAttachment } from '../types/pmOffice'
 import { getState, mutate, newId } from './store'
 
-/** Mesmo teto do original (20 MiB). */
+/** Teto de tamanho por anexo (20 MiB). */
 export const MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024
 
 export const ATTACHMENT_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.txt,.csv,application/pdf,image/png,image/jpeg,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/plain,text/csv'
@@ -113,7 +113,7 @@ export async function uploadTaskAttachment(
       mimeType: file.type || null,
       sizeBytes: file.size,
       storagePath,
-      pendingTrelloDownload: false,
+      fileMissing: false,
     },
   }
 }

@@ -9,7 +9,7 @@ import {
   migrateCasteloEloTemplates,
   migrateMarketingTemplatesCategorias,
   seedMarketingTemplatesIfNeeded,
-  subscribeAreaTemplates,
+  subscribeTemplates,
 } from '../api/marketingPlannerApi'
 
 interface NewMarketingTaskModalProps {
@@ -21,7 +21,7 @@ interface NewMarketingTaskModalProps {
     opts: { dueDate?: Date; checklist: ChecklistItem[]; recurrence?: RecurrenceConfig; assignees: string[]; assigneesNames: string[] },
   ) => Promise<void>
   /**
-   * Área dona dos templates exibidos (ELO-2936, com Pedagogia na ELO-3182).
+   * Área dona dos templates exibidos.
    * Default `'marketing'` — comportamento inalterado para as telas
    * existentes. Administrativo/Pedagogia nascem sem seed automático:
    * `seedMarketingTemplatesIfNeeded`/migrações de categoria legada só rodam
@@ -278,9 +278,9 @@ export function NewMarketingTaskModal({ bucket, users, onClose, onConfirm, area 
   // Subscrição em tempo real de templates filtrados pela tag/coluna do bucket
   useEffect(() => {
     setTemplatesLoading(true)
-    const unsub = subscribeAreaTemplates(area, (all) => {
+    const unsub = subscribeTemplates((all) => {
       // Seed automático e migrações de categoria legada são conteúdo
-      // específico de Marketing (ELO-2936) — Administrativo nasce vazio.
+      // específico de Marketing — Administrativo nasce vazio.
       if (area === 'marketing') {
         // Se coleção vazia e seed ainda não foi tentado, aguarda seed + próximo snapshot
         if (all.length === 0 && !isMarketingTemplateSeedAttempted()) {
@@ -351,7 +351,7 @@ export function NewMarketingTaskModal({ bucket, users, onClose, onConfirm, area 
       const checklist: ChecklistItem[] = checklistItems
         .filter((text) => text.trim())
         .map((text, index) => ({
-          id: `corehub_${now}_${index}`,
+          id: `chk_${now}_${index}`,
           title: text.trim(),
           isChecked: false,
           status: 'aguardando' as const,
@@ -373,7 +373,7 @@ export function NewMarketingTaskModal({ bucket, users, onClose, onConfirm, area 
   }
 
   const hasTemplates = !templatesLoading && templates.length > 0
-  // ELO-2891: só equipe interna é candidata a responsável. Os chips do que já
+  // Só equipe interna é candidata a responsável. Os chips do que já
   // foi escolhido vêm de `selectedAssigneesNames` (estado local), então filtrar
   // aqui não faz ninguém já selecionado sumir.
   const selectableUsers = onlyInternalUsers(users)

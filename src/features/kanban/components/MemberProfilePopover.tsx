@@ -1,7 +1,7 @@
 import { UserProfilePopover } from '@/components/UserProfilePopover'
 
 /**
- * Popover de perfil de um membro do card (ELO-3182/ELO-3183) — fino wrapper
+ * Popover de perfil de um membro do card — fino wrapper
  * sobre o `UserProfilePopover` compartilhado, com a ação "Remover do Cartão"
  * específica do contexto de tarefa (ausente quando o viewer não pode editar).
  */

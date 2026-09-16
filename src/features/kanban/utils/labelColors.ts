@@ -1,11 +1,11 @@
 /**
- * Paleta de cores das etiquetas do PM Office (ELO-3182) — pares de tokens
- * `var(--eh-label-*)` definidos em `styles/globals.css` (claro + `[data-theme="dark"]`).
+ * Paleta de cores das etiquetas — pares de tokens `var(--eh-label-*)`
+ * definidos em `styles/globals.css` (claro + `[data-theme="dark"]`).
  *
- * NUNCA usar hex cru vindo de uma fonte externa (ex.: `PMOfficeLabel.trelloColor`)
- * direto num chip — os hex originais do Trello reprovam contraste AA. Este
- * mapa traduz a cor de ORIGEM (semântica: "amarelo", "azul"...) para o par
- * de tokens correspondente; cor desconhecida cai no fallback neutro.
+ * NUNCA usar hex cru vindo de uma fonte externa (ex.: `PMOfficeLabel.colorKey`)
+ * direto num chip: hex arbitrários reprovam contraste AA. Este mapa traduz a
+ * cor de ORIGEM (semântica: "amarelo", "azul"...) para o par de tokens
+ * correspondente; cor desconhecida cai no fallback neutro.
  */
 const KNOWN_COLOR_KEYS = [
   'green',
@@ -22,7 +22,7 @@ export type KnownColorKey = (typeof KNOWN_COLOR_KEYS)[number]
 
 /**
  * Nome em PT-BR de cada cor — usado no seletor de cor ao criar/editar
- * etiqueta (ELO-3182) como `aria-label` de cada amostra ("Verde", "Azul"...).
+ * etiqueta como `aria-label` de cada amostra ("Verde", "Azul"...).
  * Cor nunca pode ser o único identificador (WCAG 2.2 AA 1.4.1), mesmo numa
  * grade de amostras de cor pura — o nome por extenso é o texto alternativo.
  */
@@ -39,11 +39,9 @@ export const COLOR_KEY_LABEL_PT: Record<KnownColorKey, string> = {
 
 /**
  * Forma adjetiva feminina (concorda com "etiqueta") — usada só para compor
- * `"Sem nome #N (cor)"` ao criar uma etiqueta sem título, no MESMO padrão
- * gramatical de `scripts/firestore/import-trello-agenda-pedagogas.mjs`
- * (que já produziu "Sem nome #1 (amarela)"/"Sem nome #2 (laranja)" nas 601
- * tarefas importadas) — consistência entre o nome gerado pelo import e o
- * gerado pela UI, não duas convenções divergentes pro mesmo conceito.
+ * `"Sem nome #N (cor)"` ao criar uma etiqueta sem título, ex.: "Sem nome #1
+ * (amarela)". Existe separada de {@link COLOR_KEY_LABEL_PT} porque lá o nome
+ * é usado isolado ("Amarelo") e aqui precisa concordar em gênero.
  */
 export const COLOR_KEY_LABEL_PT_FEMININE: Record<KnownColorKey, string> = {
   green: 'verde',
@@ -57,20 +55,18 @@ export const COLOR_KEY_LABEL_PT_FEMININE: Record<KnownColorKey, string> = {
 }
 
 /**
- * As 8 cores disponíveis pra escolher ao criar/editar etiqueta — EXATAMENTE
- * as que têm par `--eh-label-*-solid-bg/-fg` medido em contraste AA nos dois
- * temas (ver `globals.css`). O Trello oferece 30 (6 tons × 5 matizes); nós
- * temos 8 porque só 8 passaram pelo gate de UX. Ampliar a paleta exige medir
- * contraste de cada par novo — não é uma escolha de UI isolada, por isso
- * fica como sugestão de follow-up, não implementado aqui sem pedido.
+ * As cores disponíveis pra escolher ao criar/editar etiqueta — EXATAMENTE as
+ * que têm par `--eh-label-*-solid-bg/-fg` com contraste AA medido nos dois
+ * temas (ver `globals.css`). Ampliar a paleta exige medir o contraste de cada
+ * par novo nos dois temas; não é uma escolha de UI isolada.
  */
 export const CREATABLE_LABEL_COLORS: KnownColorKey[] = [...KNOWN_COLOR_KEYS]
 
 /**
- * Normaliza uma cor de origem (ex.: `trelloColor` cru — `'pink_dark'`,
+ * Normaliza uma cor de origem (ex.: `colorKey` cru — `'pink_dark'`,
  * `'blue_dark'`, `'lime_light'`) para uma das chaves conhecidas acima.
- * Substring match de propósito: o Trello sufixa variação de tom
- * (`_dark`/`_light`) que não muda o TOM base disponível na nossa paleta.
+ * Substring match de propósito: fontes externas costumam sufixar variação de
+ * tom (`_dark`/`_light`) que não muda o TOM base disponível na paleta.
  */
 export function normalizeLabelColorKey(raw: string | null | undefined): KnownColorKey | null {
   if (!raw) return null
@@ -79,13 +75,11 @@ export function normalizeLabelColorKey(raw: string | null | undefined): KnownCol
 }
 
 /**
- * Gera `"Sem nome #N (cor)"` pro título de uma etiqueta criada sem nome via
- * o seletor (ELO-3182) — mesmo padrão gramatical/contador do script de
- * import (`unnamedSeq`, GLOBAL entre todas as cores sem nome, não reiniciado
- * por cor). Função pura, testável isolada de Firestore: recebe a lista de
- * `displayName` JÁ existentes no projeto (etiquetas atuais) e devolve o
- * próximo número da sequência, olhando quantas já batem o padrão
- * `"Sem nome #"` (de qualquer cor).
+ * Gera `"Sem nome #N (cor)"` pro título de uma etiqueta criada sem nome via o
+ * seletor. O contador é GLOBAL entre todas as cores sem nome, não reiniciado
+ * por cor. Função pura: recebe a lista de `displayName` JÁ existentes no
+ * projeto e devolve o próximo número da sequência, olhando quantas já batem o
+ * padrão `"Sem nome #"` (de qualquer cor).
  *
  * Sem cor (`colorKey: null`) usa "sem cor" como sufixo, já que não há
  * adjetivo de cor pra compor.
@@ -108,11 +102,10 @@ export function labelColorTokens(raw: string | null | undefined): { bg: string; 
 }
 
 /**
- * Variante "solid" (ELO-3182, refinamento visual Pedagogia) — barra colorida
- * sólida no topo do card, estilo Trello, mais saturada que o chip pastel de
- * {@link labelColorTokens}. Exclusiva da área Pedagogia; Marketing/
- * Administrativo continuam usando `labelColorTokens`. Pares medidos ⩾4,5:1
- * — ver comentário em `globals.css` junto de `--eh-label-*-solid-*`.
+ * Variante "solid" — barra colorida sólida no topo do card, mais saturada que
+ * o chip pastel de {@link labelColorTokens}. Usada só pela área Pedagogia; as
+ * demais continuam com `labelColorTokens`. Pares medidos ⩾4,5:1 — ver
+ * comentário em `globals.css` junto de `--eh-label-*-solid-*`.
  */
 export function labelSolidColorTokens(raw: string | null | undefined): { bg: string; fg: string } {
   const key = normalizeLabelColorKey(raw)
@@ -127,7 +120,7 @@ export function labelSolidColorTokens(raw: string | null | undefined): { bg: str
 export function resolveLabelDisplay(
   labelId: string,
   labelsById: Map<string, import('../types/pmOffice').PMOfficeLabel>,
-): { id: string; displayName: string; trelloColor: string | null | undefined } | null {
+): { id: string; displayName: string; colorKey: string | null | undefined } | null {
   let label = labelsById.get(labelId)
   if (!label) return null
   // Fusão é indireção simples (não permitimos cadeia — mergedInto sempre
@@ -136,5 +129,5 @@ export function resolveLabelDisplay(
     const target = labelsById.get(label.mergedInto)
     if (target) label = target
   }
-  return { id: label.id, displayName: label.displayName, trelloColor: label.trelloColor }
+  return { id: label.id, displayName: label.displayName, colorKey: label.colorKey }
 }

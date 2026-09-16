@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 
 /**
  * Hook simples de media query baseado em `matchMedia`, usado para alternar
- * inline styles entre desktop e mobile (o CoreHUB não usa CSS modules/Tailwind
- * nos componentes desta feature). SSR-safe: assume `false` no primeiro render
+ * inline styles entre desktop e mobile (os componentes desta feature usam
+ * estilo inline, não CSS modules). SSR-safe: assume `false` no primeiro render
  * quando `window` não existe.
  *
  * @example const isMobile = useMediaQuery('(max-width: 640px)')
