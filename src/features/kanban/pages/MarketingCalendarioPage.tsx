@@ -30,6 +30,7 @@ import {
 } from '../api/marketingPlannerApi'
 import { updatePMTask } from '../api/pmOfficeApi'
 import { TaskDetailModal } from '../components/TaskDetailModal'
+import { TeamModal } from '../components/TeamModal'
 import { StartDateToast } from '@/components/Toast'
 // Mesmos dropdowns/estilo do Quadro (KanbanBoardPage) — ver comentário
 // acima do bloco de filtros mais abaixo para o porquê da paridade.
@@ -665,6 +666,7 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
   const [modalOpen, setModalOpen] = useState(false)
   const [toastTask, setToastTask] = useState<{ task: PMTask; date: Date } | null>(null)
   const [users, setUsers] = useState<UserRecord[]>([])
+  const [teamModalOpen, setTeamModalOpen] = useState(false)
 
   // Filtros — mesmo conjunto de estado do Quadro (KanbanBoardPage), pra que
   // as duas telas listem o mesmo recorte de tarefas quando os filtros
@@ -1087,6 +1089,7 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
             <div style={{ display: 'flex', gap: 4, overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? 2 : undefined }}>
               <NavButton label="Quadro" active={false} onClick={() => navigate(`${navBase}/quadro`)} pedagogia={isPedagogia} />
               <NavButton label="Calendário" active={true} onClick={() => undefined} pedagogia={isPedagogia} />
+              <NavButton label="Equipe" active={false} onClick={() => setTeamModalOpen(true)} pedagogia={isPedagogia} />
               {canSeeTemplates && (
                 <NavButton label="Templates" active={false} onClick={() => navigate(`${navBase}/templates`)} pedagogia={isPedagogia} />
               )}
@@ -1311,6 +1314,18 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
           </div>
         ) : null}
       </DragOverlay>
+
+      {/* MODAL EQUIPE — mesma equipe do Quadro, mesmo projeto (`getOrCreateAreaProject`
+          resolve o mesmo `projectId` nas duas telas). */}
+      <TeamModal
+        open={teamModalOpen}
+        projectId={projectId}
+        users={users}
+        team={projectTeam}
+        onClose={() => setTeamModalOpen(false)}
+        onSave={(newTeam) => setProjectTeam(newTeam)}
+        onUsersChange={setUsers}
+      />
     </DndContext>
   )
 }
