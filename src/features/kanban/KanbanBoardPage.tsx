@@ -346,15 +346,6 @@ function DeleteConfirmModal({
   )
 }
 
-// Retorna a chave de dia (YYYY-M-D) para comparação de dueDate ignorando horas
-function getDueDateDay(task: PMTask): string | null {
-  if (!task.dueDate) return null
-  const secs = (task.dueDate as { seconds: number }).seconds
-  if (typeof secs !== 'number') return null
-  const d = new Date(secs * 1000)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
 /**
  * O componente é escrito para servir mais de uma área via prop `area`, mas
  * aqui o valor é fixo em 'pedagogia' — é a única área montada, e prender o
@@ -671,10 +662,22 @@ export function KanbanBoardPage() {
     }
     for (const bucketId of Object.keys(map)) {
       map[bucketId].sort((a, b) => {
+        // `order` é o critério PRIMÁRIO: é ele que guarda a posição escolhida
+        // no arrasto, e é a partir desta lista que `localTaskOrder` é semeado
+        // a cada carregamento. Com `dueDate` na frente, a ordem manual não
+        // sobrevivia a um reload — o `order` gravado pelo arrasto só
+        // desempatava dentro do mesmo dia e nunca vencia a data.
+        //
+        // Tarefa sem `order` (as do seed, e qualquer uma criada antes de o
+        // quadro ser reordenado) cai para o fim do bloco e é ordenada por
+        // `dueDate` entre iguais — ou seja, um quadro em que ninguém arrastou
+        // nada continua saindo em ordem de data, como antes.
+        const oa = a.order ?? Infinity
+        const ob = b.order ?? Infinity
+        if (oa !== ob) return oa - ob
         const da = a.dueDate ? (a.dueDate as { seconds: number }).seconds : Infinity
         const db = b.dueDate ? (b.dueDate as { seconds: number }).seconds : Infinity
-        if (da !== db) return da - db           // primário: dueDate asc, nulls last
-        return (a.order ?? Infinity) - (b.order ?? Infinity)  // secundário: order
+        return da - db
       })
     }
     return map
@@ -682,8 +685,19 @@ export function KanbanBoardPage() {
   }, [tasks, searchQuery, labelFilter, assigneeFilter, statusFilter, area])
 
   // Sincroniza localTaskOrder com tasksByBucket quando as tarefas mudam.
-  // Preserva a ordem manual dentro do mesmo grupo de dueDate, mas sempre respeita a ordem
-  // natural entre grupos (tarefa que ganhou/perdeu dueDate é reposicionada automaticamente).
+  //
+  // Em "Ordem manual" (`sortBy === 'manual'`) a posição arrastada é a verdade:
+  // o efeito só concilia entradas e saídas de cards (tarefa criada, excluída,
+  // concluída ou movida de coluna) e nunca reordena o que já está lá. Antes
+  // ele reagrupava tudo por `dueDate` a cada snapshot — a ordem manual só
+  // sobrevivia DENTRO de um mesmo dia, e como cada tarefa costuma ter uma data
+  // distinta (cada uma virava seu próprio grupo), qualquer arrasto era
+  // desfeito na hora. Era isso que fazia "Ordem manual" se comportar como se
+  // ainda estivesse ordenando por data.
+  //
+  // Nos modos de ordenação explícita (data/título) o render usa `sortTasks`
+  // direto e ignora `localTaskOrder`, então o reagrupamento aqui não tinha
+  // utilidade nenhuma nesses modos.
   useEffect(() => {
     setLocalTaskOrder((prev) => {
       const next: Record<string, string[]> = {}
@@ -691,43 +705,14 @@ export function KanbanBoardPage() {
         const prevIds = prev[bucketId] ?? []
         const newIds = bucketTasks.map((t) => t.id)
 
-        // Composição mudou → usa nova ordem natural diretamente
-        const sameSet =
-          prevIds.length === newIds.length && newIds.every((id) => prevIds.includes(id))
-        if (!sameSet) {
-          next[bucketId] = newIds
-          continue
-        }
-
-        // Composição igual — reconstruir respeitando a ordem natural entre grupos de dueDate,
-        // mas preservando a ordem manual de prevIds dentro de cada grupo.
-        const taskSecMap = Object.fromEntries(
-          bucketTasks.map((t) => [
-            t.id,
-            (t.dueDate as { seconds: number } | null)?.seconds ?? Infinity,
-          ]),
-        )
-
-        // Agrupar prevIds pelo dueDate.seconds atual (reflete possível mudança de data)
-        const groupsInPrev = new Map<number, string[]>()
-        for (const id of prevIds) {
-          const sec = taskSecMap[id]
-          if (!groupsInPrev.has(sec)) groupsInPrev.set(sec, [])
-          groupsInPrev.get(sec)!.push(id)
-        }
-
-        // Ordem natural dos grupos vem de tasksByBucket (já ordenado por dueDate asc)
-        const groupOrder: number[] = []
-        for (const task of bucketTasks) {
-          const sec = taskSecMap[task.id]
-          if (!groupOrder.includes(sec)) groupOrder.push(sec)
-        }
-
-        // Reconstruir: grupos em ordem natural, dentro de cada grupo a ordem de prevIds
-        const reconstructed: string[] = []
-        for (const sec of groupOrder) reconstructed.push(...(groupsInPrev.get(sec) ?? []))
-
-        next[bucketId] = reconstructed
+        // Concilia a composição preservando a ordem já existente: mantém os ids
+        // conhecidos na posição em que estão, remove os que saíram e anexa os
+        // novos no fim (é onde o usuário espera ver uma tarefa recém-criada).
+        const present = new Set(newIds)
+        const kept = prevIds.filter((id) => present.has(id))
+        const known = new Set(kept)
+        const added = newIds.filter((id) => !known.has(id))
+        next[bucketId] = [...kept, ...added]
       }
       return next
     })
@@ -1066,11 +1051,11 @@ export function KanbanBoardPage() {
       const overTask = taskById[String(over.id)]
       // Se over for a coluna em si (não uma tarefa) ou tarefa não encontrada, abort
       if (!activeTask || !overTask) return
-      // Bloqueia movimentação entre grupos de dueDate distintos — EXCETO em
-      // Pedagogia, que usa ordenação manual pura (as tarefas de lá
-      // normalmente não têm `dueDate`). Parametrizado por área: as demais
-      // continuam com o bloqueio original, sem mudança de comportamento.
-      if (area !== 'pedagogia' && getDueDateDay(activeTask) !== getDueDateDay(overTask)) return
+      // Sem trava por dia: arrastar um card para junto de outro com data
+      // diferente é permitido, e a posição escolhida é respeitada. O quadro
+      // tinha aqui um gate que abortava o reorder quando `dueDate` diferia —
+      // junto com o reagrupamento por data no efeito de `localTaskOrder`, era
+      // o que fazia a "Ordem manual" não segurar o arrasto.
       const currentIds = localTaskOrder[bucketId] ?? tasksByBucket[bucketId]?.map((t) => t.id) ?? []
       const oldIndex = currentIds.indexOf(String(active.id))
       const newIndex = currentIds.indexOf(String(over.id))
