@@ -1,44 +1,34 @@
-import { useEffect, useRef, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
-import { ImmersiveContext, shouldResetImmersive } from './ImmersiveContext'
+import { Outlet } from 'react-router-dom'
 
 /**
  * Casca do app, reduzida ao que o quadro realmente precisa.
  *
  * O padding de 24px do `<main>` é deliberado, não decorativo: a página do
  * quadro o COMPENSA com margem negativa do mesmo tamanho
- * (`PEDAGOGIA_MAIN_PADDING_PX` em `KanbanBoardPage.tsx`) para sangrar até as
- * bordas da tela. Mudar este número aqui sem mudar lá deixa uma faixa branca
- * em volta do quadro.
+ * (`PEDAGOGIA_MAIN_PADDING_PX` em `KanbanBoardPage.tsx`/
+ * `MarketingCalendarioPage.tsx`) para sangrar até as bordas da tela. Mudar
+ * este número aqui sem mudar lá deixa uma faixa branca em volta do quadro.
+ *
+ * Existiu aqui um modo "ampliado" (`ImmersiveContext`, ligado por um botão no
+ * header do Quadro) para esconder o cabeçalho do app — herdado do CoreHub, de
+ * onde este Kanban foi copiado. Removido: este `AppShell` já não tem
+ * cabeçalho/sidebar global nenhum pra esconder, então o toggle não mudava
+ * nada visível na tela além do próprio botão. Era também a única diferença
+ * de largura entre a barra de abas do Quadro e a do Calendário (que nunca
+ * teve esse botão), o que fazia a barra "pular" de posição ao trocar de
+ * tela.
  */
 const MAIN_PADDING_PX = 24
 
 export function AppShell() {
-  const [immersive, setImmersive] = useState(false)
-  const location = useLocation()
-  const prevPathname = useRef(location.pathname)
-
-  useEffect(() => {
-    if (shouldResetImmersive(prevPathname.current, location.pathname)) {
-      setImmersive(false)
-    }
-    prevPathname.current = location.pathname
-  }, [location.pathname])
-
   return (
-    <ImmersiveContext.Provider value={{ immersive, setImmersive }}>
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--eh-bg)' }}>
-        {/* O padding fica SEMPRE, inclusive em modo ampliado — a página já o
-            compensa com margem negativa própria, independente de o cabeçalho
-            estar visível. Zerá-lo aqui faria o quadro vazar 24px para fora da
-            tela, porque a compensação do outro lado continua valendo. */}
-        <main
-          className="flex-1 overflow-y-auto"
-          style={{ minHeight: 0, padding: MAIN_PADDING_PX }}
-        >
-          <Outlet />
-        </main>
-      </div>
-    </ImmersiveContext.Provider>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--eh-bg)' }}>
+      <main
+        className="flex-1 overflow-y-auto"
+        style={{ minHeight: 0, padding: MAIN_PADDING_PX }}
+      >
+        <Outlet />
+      </main>
+    </div>
   )
 }

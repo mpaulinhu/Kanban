@@ -43,7 +43,6 @@ import { TeamModal } from './components/TeamModal'
 import { ActionToast, StartDateToast } from '@/components/Toast'
 import { useRole } from '@/hooks/useRole'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useImmersive } from '@/layouts/ImmersiveContext'
 
 const PLUS_ICON =
   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
@@ -357,8 +356,6 @@ export function KanbanBoardPage() {
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const navBase = NAV_BASE[area]
-  // Botão "ampliar" do quadro — esconde o cabeçalho do app (ver ImmersiveContext).
-  const { immersive, setImmersive } = useImmersive()
   const { canWriteScreen } = useRole()
   const canWrite = canWriteScreen()
   // Tarefa clicada em "Minhas Tarefas" (Dashboard) — repassada para
@@ -1305,20 +1302,6 @@ export function KanbanBoardPage() {
   // mode tem uma variante própria, mais escura, para não brigar com o tema).
   const isPedagogia = area === 'pedagogia'
 
-  // Esc sai do modo ampliado — comportamento esperado por quem já
-  // usou qualquer tela cheia. Gated por `isPedagogia && immersive`: nas
-  // outras áreas `immersive` nunca fica `true` (nenhum botão pra ligá-lo),
-  // então o listener não tem efeito nenhum lá mesmo que o hook rode sempre
-  // (hooks não podem ser condicionais — a condição fica DENTRO do efeito).
-  useEffect(() => {
-    if (!isPedagogia || !immersive) return
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setImmersive(false)
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [isPedagogia, immersive, setImmersive])
-
   // A casca do app (`AppShell.tsx`) é global e aplica 24px de padding + fundo
   // `--eh-bg` no `<main>` que envolve QUALQUER página, incluindo esta — NÃO
   // tocado aqui de propósito, porque mudar o `<main>` global vazaria pra toda
@@ -1629,49 +1612,15 @@ export function KanbanBoardPage() {
               <NavButton label="Templates" active={false} onClick={() => navigate(`${navBase}/templates`)} pedagogia={isPedagogia} />
             )}
           </div>
-          {/* Botão de ampliar — "ícone para ampliar e preencher a
-              tela toda desse kanban, e sair a lateral das abas". Só desktop
-              (a sidebar no mobile já é um drawer que se fecha sozinho, sem
-              ocupar espaço permanente — não há "lateral" competindo com o
-              quadro pra justificar o mecanismo lá, e teria que lidar com o
-              próprio drawer aberto simultaneamente). Só Pedagogia: as outras
-              áreas nunca recebem `isPedagogia=true`, então este bloco nunca
-              renderiza pra elas. */}
-          {isPedagogia && !isMobile && (
-            <button
-              type="button"
-              onClick={() => setImmersive(!immersive)}
-              className="eh-pm-header-btn"
-              data-active={immersive}
-              aria-pressed={immersive}
-              aria-label={immersive ? 'Sair da ampliação' : 'Ampliar quadro'}
-              title={immersive ? 'Sair da ampliação (Esc)' : 'Ampliar quadro'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: 7,
-                border: '1px solid transparent',
-                color: 'var(--eh-pm-header-fg)',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              {immersive ? (
-                // Recolher — setas apontando pra DENTRO (par convencional do ícone de expandir).
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M6 2v3a1 1 0 0 1-1 1H2M10 2v3a1 1 0 0 0 1 1h3M6 14v-3a1 1 0 0 0-1-1H2M10 14v-3a1 1 0 0 1 1-1h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              ) : (
-                // Ampliar — setas apontando pra FORA.
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </button>
-          )}
+          {/* Botão de ampliar ("ícone de expandir") REMOVIDO — não tinha
+              utilidade nesta versão do app: o texto do botão dizia "esconde
+              o cabeçalho do app" (herdado do CoreHub, de onde este Kanban foi
+              copiado), mas o `AppShell` deste repo já não tem cabeçalho/
+              sidebar global nenhum pra esconder — o toggle não mudava nada
+              visível na tela além do próprio botão ficar ativo. Também era a
+              única diferença de largura entre a barra de abas do Quadro e a
+              do Calendário (que nunca teve esse botão): ao navegar entre as
+              duas telas, a barra "pulava" de posição por causa dele. */}
         </div>
       </div>
 
