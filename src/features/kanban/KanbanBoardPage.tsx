@@ -1018,6 +1018,30 @@ export function KanbanBoardPage() {
         if (!taskToMove) return
         try {
           await moveTaskToBucket(projectId, { ...taskToMove, bucketId: originalBucketId }, finalBucketId)
+
+          // Posiciona a tarefa na coluna de destino em vez de deixar o
+          // `order` antigo (relativo à coluna de origem) decidir a posição
+          // sozinho — era isso que fazia o card cair sempre no fim (ou em
+          // qualquer posição arbitrária que aquele número antigo mandasse na
+          // coluna nova). `tasksByBucket[finalBucketId]` já reflete o
+          // optimistic update do `handleDragOver` (deriva de `tasks`, já
+          // atualizado), então a tarefa arrastada já aparece nessa lista —
+          // mesma técnica do reorder same-column logo abaixo, só que a
+          // lista de referência é `tasksByBucket` (a ordem "natural" por
+          // data), não `localTaskOrder` (que é por coluna de ORIGEM e não
+          // tem entrada pra esta tarefa na coluna nova ainda).
+          const destIds = (tasksByBucket[finalBucketId] ?? []).map((t) => t.id)
+          const activeIdx = destIds.indexOf(taskToMove.id)
+          // `over` pode ser outra tarefa (posição relativa a ela) ou a
+          // coluna vazia/o espaço abaixo do último card (cai no fim).
+          const overIdx = over.data.current?.type === 'task' ? destIds.indexOf(String(over.id)) : -1
+          const targetIdx = overIdx === -1 ? destIds.length - 1 : overIdx
+          if (activeIdx !== -1 && targetIdx !== -1) {
+            const destOrder = arrayMove(destIds, activeIdx, targetIdx)
+            setLocalTaskOrder((prev) => ({ ...prev, [finalBucketId]: destOrder }))
+            await reorderTasksInBucket(projectId, finalBucketId, destOrder).catch(console.error)
+          }
+
           const toBucket = buckets.find((b) => b.id === finalBucketId)
           audit.logTask(
             'pm_task.move',
