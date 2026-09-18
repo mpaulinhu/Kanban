@@ -614,13 +614,21 @@ function DayView({ date, tasksByDay, today, onTaskClick, onChangeStatus, users, 
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
       {/* Cabeçalho do dia — card com fundo próprio: uma linha de texto solta
           sobre o gradiente do header (versão anterior) ficava com contraste
-          ruim e sem destaque de "tela de detalhe". */}
+          ruim e sem destaque de "tela de detalhe".
+          `--eh-primary-soft` é translúcido (`color-mix(..., transparent)`,
+          ver globals.css) — pensado pra ficar sobre `--eh-surface` opaco. Sem
+          um branco sólido por trás (aqui é o GRADIENTE da página), o
+          resultado é verde-translúcido sobre verde-gradiente: quase sem
+          contraste nenhum, e o texto `--eh-primary` (também um verde,
+          `#0c6b5e`) somado a isso ficava ilegível quando `isToday`. Fundo
+          sempre OPACO (`--eh-surface`); o destaque de "hoje" fica só na
+          borda mais forte e na cor do texto. */}
       <div
         style={{
           padding: '14px 18px',
           borderRadius: 10,
           marginBottom: 16,
-          background: isToday ? 'var(--eh-primary-soft, var(--eh-surface))' : 'var(--eh-surface)',
+          background: 'var(--eh-surface)',
           border: `1px solid ${isToday ? 'var(--eh-primary)' : 'var(--eh-border)'}`,
         }}
       >
@@ -632,7 +640,11 @@ function DayView({ date, tasksByDay, today, onTaskClick, onChangeStatus, users, 
         </p>
       </div>
       {tasks.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--eh-muted-2)' }}>Nenhuma tarefa para este dia.</p>
+        // Fica FORA do card (na área do gradiente), por isso a cor branca —
+        // mesmo raciocínio do bug corrigido acima: `--eh-muted-2` é cinza
+        // escuro pensado pra fundo claro, quase ilegível direto sobre o
+        // verde da página.
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--eh-pm-header-fg-muted)' }}>Nenhuma tarefa para este dia.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {tasks.map((task) => (
