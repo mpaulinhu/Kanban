@@ -630,19 +630,18 @@ export function KanbanBoardPage() {
   const tasksByBucket = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     const visible = tasks.filter((t) => {
-      // Pedagogia: SEM seção colapsável "Tarefas concluídas" — todo card fica
-      // solto na coluna. `done` entra na mesma lista/SortableContext das
-      // demais, assumindo o custo de montar todos os cards de uma vez (ver o
-      // comentário sobre `content-visibility` em MarketingKanbanCard.tsx antes
-      // de tentar otimizar isso). As outras áreas mantêm o filtro original:
-      // só todo/in_progress aqui, e done vai para doneTasksByBucket → seção
-      // colapsável.
-      // `atrasado` entra junto: é um status real e persistido, e
-      // deixá-lo de fora sumia com a tarefa do quadro inteiro — não só a
+      // Tarefa concluída sai da lista principal e vai para a seção colapsável
+      // no rodapé da coluna (`doneTasksByBucket` → bloco "Tarefas concluídas"),
+      // o mesmo comportamento do quadro de Marketing do CoreHub.
+      //
+      // Antes a Pedagogia deixava `done` solto na lista, no modelo Trello. A
+      // troca também elimina o custo de montar todos os cards concluídos de
+      // uma vez: agora eles só renderizam quando a seção é expandida.
+      //
+      // `atrasado` continua na lista principal: é um status real e persistido,
+      // e deixá-lo de fora sumia com a tarefa do quadro inteiro — não só a
       // escondia de um filtro.
-      if (area === 'pedagogia') {
-        if (t.status !== 'todo' && t.status !== 'in_progress' && t.status !== 'done' && t.status !== 'atrasado') return false
-      } else if (t.status !== 'todo' && t.status !== 'in_progress') {
+      if (t.status !== 'todo' && t.status !== 'in_progress' && t.status !== 'atrasado') {
         return false
       }
       if (!matchesLabelFilter(t)) return false
@@ -735,22 +734,41 @@ export function KanbanBoardPage() {
   }, [tasksByBucket])
 
   const doneTasksByBucket = useMemo(() => {
-    // Pedagogia não usa mais a seção colapsável — `done` já está dentro de
-    // `tasksByBucket` acima. Mapa vazio aqui evita renderizar a tarefa DUAS
-    // vezes (uma na lista principal, outra na seção "concluídas").
-    if (area === 'pedagogia') return {} as Record<string, PMTask[]>
     const q = searchQuery.trim().toLowerCase()
     const map: Record<string, PMTask[]> = {}
     for (const t of tasks) {
       if (t.status !== 'done') continue
       if (!matchesLabelFilter(t)) continue
+      // Os filtros de status e responsável valem aqui também — sem isso, uma
+      // tarefa concluída escapava do filtro por aparecer nesta seção, que o
+      // filtro da lista principal não alcança.
+      if (statusFilter.length > 0 && !statusFilter.includes(t.status)) continue
+      if (assigneeFilter.length > 0) {
+        const uids = t.assignees ?? []
+        const semResponsavel = uids.length === 0
+        const casa = assigneeFilter.includes(NO_ASSIGNEE_FILTER_KEY)
+          ? semResponsavel || uids.some((u) => assigneeFilter.includes(u))
+          : uids.some((u) => assigneeFilter.includes(u))
+        if (!casa) continue
+      }
       if (q && !t.title.toLowerCase().includes(q) && !(t.checklist ?? []).some((item) => item.title.toLowerCase().includes(q)) && !bucketMap[t.bucketId]?.toLowerCase().includes(q)) continue
       if (!map[t.bucketId]) map[t.bucketId] = []
       map[t.bucketId].push(t)
     }
+    // Mesma ordenação da lista principal: dueDate asc (sem data no fim),
+    // `order` desempatando. Sem isso a seção sairia na ordem crua do
+    // Firestore, que não é estável entre snapshots.
+    for (const bucketId of Object.keys(map)) {
+      map[bucketId].sort((a, b) => {
+        const da = a.dueDate ? (a.dueDate as { seconds: number }).seconds : Infinity
+        const db = b.dueDate ? (b.dueDate as { seconds: number }).seconds : Infinity
+        if (da !== db) return da - db
+        return (a.order ?? Infinity) - (b.order ?? Infinity)
+      })
+    }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps -- matchesLabelFilter fecha sobre labelFilter, listado explicitamente abaixo
-  }, [tasks, searchQuery, labelFilter, area])
+  }, [tasks, searchQuery, labelFilter, assigneeFilter, statusFilter])
 
   // Reinicia o destaque sempre que o taskId da URL mudar (ex.: um
   // novo clique em "Minhas Tarefas" enquanto o Kanban já está aberto).
@@ -1834,13 +1852,10 @@ export function KanbanBoardPage() {
                       ))}
                     </SortableContext>
 
-                    {/* SEÇÃO TAREFAS CONCLUÍDAS — não existe na Pedagogia, que
-                        deixa todo card solto na coluna. `doneTasks` já é sempre
-                        [] ali (doneTasksByBucket retorna {} nessa área), então
-                        este bloco nunca renderiza lá; a guarda redundante em
-                        `area !== 'pedagogia'` deixa a intenção explícita em vez
-                        de depender só do array vazio. */}
-                    {area !== 'pedagogia' && doneTasks.length > 0 && (
+                    {/* SEÇÃO TAREFAS CONCLUÍDAS — bloco colapsável no rodapé da
+                        coluna, fechado por padrão, como no quadro de Marketing
+                        do CoreHub. Os cards só montam quando expandido. */}
+                    {doneTasks.length > 0 && (
                       <div
                         style={{
                           marginTop: bucketTasks.length > 0 ? 4 : 0,
@@ -1867,12 +1882,8 @@ export function KanbanBoardPage() {
                           {isDoneExpanded ? '▼' : '▶'} Tarefas concluídas ({doneTasks.length})
                         </button>
                         {isDoneExpanded && doneTasks.map((task) => (
-                          // Este bloco só renderiza para Marketing/Administrativo
-                          // (guarda `area !== 'pedagogia'` acima) — a Pedagogia não
-                          // tem mais seção colapsável nem esmaecimento de concluídas
-                          // (ver tasksByBucket/doneTasksByBucket acima). Opacidade
-                          // 0,7 sempre aqui, sem ramo condicional: TypeScript já
-                          // estreita `area` para excluir 'pedagogia' neste escopo.
+                          // Concluídas entram esmaecidas (0,7) para se
+                          // distinguirem das ativas mesmo com a seção aberta.
                           <div key={task.id} style={{ opacity: 0.7 }}>
                             <MarketingKanbanCard
                               sortableId={task.id}
