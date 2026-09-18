@@ -121,20 +121,10 @@ const STATUS_OPTIONS_BY_TITLE: Record<string, { value: PMTask['status']; label: 
   ],
 }
 
-const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Baixa' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'high', label: 'Alta' },
-  { value: 'urgent', label: 'Urgente' },
-]
-
 type ChecklistStatus = NonNullable<ChecklistItem['status']>
 
 const STATUS_LABEL: Record<string, string> = {
   done: 'Concluída', in_progress: 'Em andamento', todo: 'A fazer', atrasado: 'Atrasado',
-}
-const PRIORITY_LABEL: Record<string, string> = {
-  low: 'Baixa', normal: 'Normal', high: 'Alta', urgent: 'Urgente',
 }
 
 // Botão de fechar do header — padrão enterprise (mesmo visual do CategoryFormDialog)
@@ -518,7 +508,6 @@ export function TaskDetailModal({
 
   const [title, setTitle] = useState('')
   const [status, setStatus] = useState<PMTask['status']>('todo')
-  const [priority, setPriority] = useState('normal')
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [dueDate, setDueDate] = useState<Date | null>(null)
@@ -588,7 +577,6 @@ export function TaskDetailModal({
     if (!task) return
     setTitle(task.title)
     setStatus(task.status)
-    setPriority(task.priority ?? 'normal')
     setDescription(task.description ?? '')
     setStartDate(toDate(task.startDate))
     setDueDate(toDate(task.dueDate))
@@ -806,7 +794,6 @@ export function TaskDetailModal({
       const patch: PMTaskPatch = {
         title: title.trim(),
         status,
-        priority,
         startDate: dateToTs(effectiveStartDate),
         dueDate: dateToTs(effectiveDueDate),
         assignees,
@@ -1223,13 +1210,11 @@ export function TaskDetailModal({
                     labelsById={resolvedLabelsById}
                     startDate={startDate}
                     dueDate={dueDate}
-                    priority={priority}
                     recurrenceEnabled={recurrenceEnabled}
                     recurrencePattern={recurrencePattern}
                     recurrenceInterval={recurrenceInterval}
                     recurrenceDays={recurrenceDays}
                     onDatesChange={(nextStart, nextDue) => { setStartDate(nextStart); setDueDate(nextDue) }}
-                    onPriorityChange={setPriority}
                     onRecurrenceChange={(enabled, pattern, interval, days) => {
                       setRecurrenceEnabled(enabled)
                       setRecurrencePattern(pattern)
@@ -1336,18 +1321,7 @@ export function TaskDetailModal({
                   </div>
                 </div>
               )}
-              <div>
-                <div className="max-w-[calc(50%-8px)]">
-                  <label className="block text-sm font-medium mb-1">Prioridade</label>
-                  <select
-                    value={priority}
-                    onChange={e => setPriority(e.target.value)}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-              </div>
+              {/* Prioridade removida (campo descontinuado). */}
               <div>
                 <label className="block text-sm font-medium mb-1">Observações</label>
                 <textarea
@@ -1616,10 +1590,7 @@ export function TaskDetailModal({
           ) : (
             <div className="space-y-3">
               <ReadField label="Título" value={task.title} />
-              <div className="grid grid-cols-2 gap-4">
-                <ReadField label="Status" value={task.rawStatus ?? STATUS_OPTIONS_BY_TITLE[task.title]?.find(o => o.value === task.status)?.label ?? STATUS_LABEL[task.status] ?? task.status} />
-                <ReadField label="Prioridade" value={PRIORITY_LABEL[task.priority] ?? task.priority} />
-              </div>
+              <ReadField label="Status" value={task.rawStatus ?? STATUS_OPTIONS_BY_TITLE[task.title]?.find(o => o.value === task.status)?.label ?? STATUS_LABEL[task.status] ?? task.status} />
               {(task.observacoes || task.description) && (
                 <ReadField label="Observações" value={task.observacoes ?? task.description ?? ''} />
               )}

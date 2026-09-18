@@ -4,7 +4,7 @@ import type { PMTask } from '../types/pmOffice'
 import { getState, mergeIntoTask, mutate, tsNow } from './store'
 
 export type PMTaskPatch = Partial<Pick<PMTask,
-  'title' | 'description' | 'status' | 'priority' | 'progress' |
+  'title' | 'description' | 'status' | 'progress' |
   'startDate' | 'dueDate' | 'assignees' | 'assigneesNames' |
   'avisoApi' | 'observacoes' | 'rawStatus' | 'referencias' | 'linkRoteiro' |
   'order' | 'wbsOrder' | 'parentTaskId' |

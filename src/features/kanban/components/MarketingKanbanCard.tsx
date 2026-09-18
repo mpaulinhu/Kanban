@@ -50,7 +50,13 @@ const HIGHLIGHT_FADE_OUT_TRANSITION = 'background-color 350ms ease-out'
 
 const STATUS_DOT: Record<string, string> = {
   todo: 'var(--eh-muted-2)',
-  in_progress: '#3b82f6',
+  // Laranja, não azul — pareado de propósito com o chip de status do
+  // cabeçalho do modal (STATUS_CHIP_CFG em TaskDetailModal.tsx), que já
+  // usava laranja para "Em andamento". Usado nos 3 pontos deste arquivo
+  // (bolinha de título, bolinha ao lado da data — que TROCOU de prioridade
+  // para status — e o submenu "⋯"), então a mudança fica consistente
+  // dentro do próprio card.
+  in_progress: '#f97316',
   done: '#22c55e',
   atrasado: '#ef4444',
 }
@@ -74,13 +80,6 @@ const CARD_STATUS_LABEL: Record<string, string> = {
   in_progress: 'Em andamento',
   done: 'Concluída',
   atrasado: 'Atrasado',
-}
-
-const PRIORITY_DOT: Record<string, string> = {
-  urgent: '#ef4444',
-  high: '#f97316',
-  normal: 'var(--eh-muted-2)',
-  low: 'var(--eh-border-hover)',
 }
 
 type ChecklistStatus = NonNullable<ChecklistItem['status']>
@@ -981,16 +980,19 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
-          {/* priority dot */}
+          {/* status dot — era de prioridade (campo removido: "se alguém
+              quiser destacar, faça pela etiqueta"); passou a refletir o
+              status da tarefa, com as mesmas 4 cores do chip do modal e do
+              submenu "⋯" deste card. */}
           <span
             style={{
               width: 6,
               height: 6,
               borderRadius: '50%',
               flexShrink: 0,
-              background: PRIORITY_DOT[task.priority] ?? 'var(--eh-muted-2)',
+              background: STATUS_DOT[task.status] ?? 'var(--eh-muted-2)',
             }}
-            title={task.priority}
+            title={CARD_STATUS_LABEL[task.status] ?? task.status}
           />
           {dueDate && (
             <span

@@ -32,13 +32,6 @@ function findEmailByName(name: string, users: UserRecord[]): string | undefined 
   return matches.length === 1 ? matches[0].email : undefined
 }
 
-const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Baixa' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'high', label: 'Alta' },
-  { value: 'urgent', label: 'Urgente' },
-]
-
 /**
  * Corpo do modal em modo "documento" — exclusivo da área
  * Pedagogia, só quando `isEditable`. Substitui o formulário clássico
@@ -66,13 +59,11 @@ export function PedagogiaDocumentBody({
   labelsById,
   startDate,
   dueDate,
-  priority,
   recurrenceEnabled,
   recurrencePattern,
   recurrenceInterval,
   recurrenceDays,
   onDatesChange,
-  onPriorityChange,
   onRecurrenceChange,
   assignees,
   assigneesNames,
@@ -94,13 +85,11 @@ export function PedagogiaDocumentBody({
   labelsById: Map<string, PMOfficeLabel>
   startDate: Date | null
   dueDate: Date | null
-  priority: string
   recurrenceEnabled: boolean
   recurrencePattern: RecurrenceConfig['pattern']
   recurrenceInterval: number
   recurrenceDays: number[]
   onDatesChange: (start: Date | null, due: Date | null) => void
-  onPriorityChange: (priority: string) => void
   onRecurrenceChange: (enabled: boolean, pattern: RecurrenceConfig['pattern'], interval: number, days: number[]) => void
   assignees: string[]
   assigneesNames: string[]
@@ -250,9 +239,8 @@ export function PedagogiaDocumentBody({
             }
           />
         )}
-        {/* Prioridade e Repetir continuam existindo, mas não aparecem soltos
-            como campo de formulário no meio do documento — ficam atrás desta
-            pílula "Mais opções". */}
+        {/* "Repetir" não aparece solto como campo de formulário no meio do
+            documento — fica atrás desta pílula "Mais opções". */}
         <ActionPill
           label="Mais opções"
           onClick={() => setShowExtras((v) => !v)}
@@ -285,18 +273,10 @@ export function PedagogiaDocumentBody({
         </div>
       )}
 
+      {/* Prioridade foi removida (campo descontinuado — "se alguém quiser
+          destacar, faça pela etiqueta"): "Mais opções" hoje só tem Repetir. */}
       {showExtras && (
         <div className="p-3 rounded-md space-y-3" style={{ background: 'var(--eh-pm-neutral-surface)' }}>
-          <div>
-            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--eh-pm-modal-text)' }}>Prioridade</label>
-            <select
-              value={priority}
-              onChange={(e) => { onPriorityChange(e.target.value); void onSaveField({ priority: e.target.value }) }}
-              className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
           <div>
             <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--eh-pm-modal-text)' }}>Repetir esta tarefa</label>
             {/* Recorrência grava IMEDIATAMENTE a cada mudança — `onRecurrenceChange`

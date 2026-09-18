@@ -184,7 +184,6 @@ export interface PMTask {
    * Ver `previousStatusBeforeAtrasado`.
    */
   status: 'todo' | 'in_progress' | 'done' | 'atrasado'
-  priority: string
   progress: number
   assignees: string[]
   assigneesNames?: string[]

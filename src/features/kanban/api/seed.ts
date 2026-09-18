@@ -136,7 +136,6 @@ interface TaskSeed {
   title: string
   status: PMTask['status']
   description?: string
-  priority?: string
   dueDate?: Timestamp
   startDate?: Timestamp
   assignees?: UserRecord[]
@@ -154,7 +153,6 @@ const TASK_SEEDS: TaskSeed[] = [
     description:
       'Consolidar as entregas prioritárias do trimestre com base nos pedidos de clientes e na capacidade atual do time.',
     status: 'todo',
-    priority: 'high',
     dueDate: d('2026-02-20'),
     assignees: [ANA],
     labels: ['lbl-produto'],
@@ -179,7 +177,6 @@ const TASK_SEEDS: TaskSeed[] = [
     bucketId: 'bkt-afazer',
     title: 'Preparar apresentação de resultados para a diretoria',
     status: 'todo',
-    priority: 'normal',
     dueDate: d('2026-03-18'),
     assignees: [ANA, JULIANA],
     labels: ['lbl-produto', 'lbl-reuniao'],
@@ -211,7 +208,6 @@ const TASK_SEEDS: TaskSeed[] = [
     title: 'Refazer a tela de relatórios',
     description: 'Reconstrução da tela com os gráficos que os clientes mais pedem e exportação em CSV.',
     status: 'in_progress',
-    priority: 'high',
     startDate: d('2026-02-10'),
     dueDate: d('2026-03-27'),
     assignees: [RAFAEL, CARLA],
@@ -248,7 +244,6 @@ const TASK_SEEDS: TaskSeed[] = [
     bucketId: 'bkt-andamento',
     title: 'Corrigir lentidão no carregamento da lista de pedidos',
     status: 'atrasado',
-    priority: 'urgent',
     startDate: d('2026-01-20'),
     dueDate: d('2026-02-13'),
     assignees: [RAFAEL],
@@ -274,7 +269,6 @@ const TASK_SEEDS: TaskSeed[] = [
     bucketId: 'bkt-revisao',
     title: 'Revisão de código — integração de pagamentos',
     status: 'todo',
-    priority: 'high',
     dueDate: d('2026-04-16'),
     assignees: [RAFAEL],
     labels: ['lbl-dev'],
@@ -334,7 +328,6 @@ const TASK_SEEDS: TaskSeed[] = [
     bucketId: 'bkt-aguardando',
     title: 'Aprovação do orçamento de infraestrutura',
     status: 'atrasado',
-    priority: 'high',
     dueDate: d('2026-02-27'),
     assignees: [ANA],
     labels: ['lbl-urgente', 'lbl-produto'],
@@ -433,7 +426,6 @@ function buildTask(seed: TaskSeed, index: number): PMTask {
     source: 'manual',
     type: 'task',
     status: seed.status,
-    priority: seed.priority ?? 'normal',
     progress: seed.status === 'done' ? 100 : items ? Math.round(((seed.checklistDoneCount ?? 0) / items.length) * 100) : 0,
     assignees: assignees.map((u) => u.uid),
     assigneesNames: assignees.map((u) => u.name),
