@@ -158,6 +158,18 @@
   --eh-pm-header-surface: rgba(0, 0, 0, 0.15);
   --eh-pm-header-surface-active: rgba(0, 0, 0, 0.25);
   --eh-pm-header-border: rgba(255, 255, 255, 0.25);
+  /* Texto do badge de contador sobre fundo `--eh-pm-header-fg` (branco) nos
+     filtros do header — precisa ser cor SÓLIDA. `--eh-pm-board-bg` não serve
+     de fallback aqui: é `linear-gradient(...)`, e `color` descarta um
+     gradiente silenciosamente (sem erro, sem warning) e cai no valor
+     herdado — que é branco, mesma cor do fundo do badge, texto invisível.
+     Usa o tom mais escuro do gradiente CLARO (amostrado no comentário de
+     `--eh-pm-board-bg` acima). `--eh-pm-header-*` não tem variante dark
+     própria (só existe uma definição, herdada nos dois temas), então este
+     token também não precisa de uma — o header dark usa o mesmo overlay
+     sobre um gradiente ainda mais escuro, e este verde continua com
+     contraste sólido contra o branco do badge nos dois casos. */
+  --eh-pm-header-fg-inverse: #186546;
 
   /* Alça da barra de rolagem da coluna — translúcida para servir as 8 cores
      de coluna sem uma regra por cor. Ver `.eh-pm-task-list`. */

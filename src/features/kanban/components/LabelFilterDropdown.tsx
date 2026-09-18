@@ -81,6 +81,7 @@ export function LabelFilterDropdown({
         style={
           pedagogia
             ? {
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
@@ -93,6 +94,7 @@ export function LabelFilterDropdown({
                 cursor: 'pointer',
               }
             : {
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
@@ -107,7 +109,32 @@ export function LabelFilterDropdown({
               }
         }
       >
-        Etiquetas{hasSelection ? ` (${selected.length})` : ''}
+        Etiquetas
+        {/* Badge SOBREPOSTO, não concatenado no rótulo — ver comentário
+            equivalente em `BoardFiltersDropdown.tsx` (mesmo bug, mesma
+            correção, componentes irmãos que não compartilham este trecho). */}
+        {hasSelection ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: -5,
+              right: -5,
+              minWidth: 15,
+              height: 15,
+              padding: '0 3px',
+              borderRadius: 999,
+              fontSize: 9.5,
+              fontWeight: 700,
+              lineHeight: '15px',
+              textAlign: 'center',
+              background: pedagogia ? 'var(--eh-pm-header-fg)' : 'var(--eh-primary)',
+              color: pedagogia ? 'var(--eh-pm-header-fg-inverse)' : 'var(--eh-surface)',
+            }}
+          >
+            {selected.length}
+          </span>
+        ) : null}
       </button>
       {open && (
         <div

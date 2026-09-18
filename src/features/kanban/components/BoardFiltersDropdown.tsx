@@ -65,12 +65,14 @@ function FilterDropdown({
         style={
           pedagogia
             ? {
+                position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
                 borderRadius: 7, fontSize: 13, fontWeight: 500,
                 border: '1px solid transparent', color: 'var(--eh-pm-header-fg)',
                 cursor: 'pointer', whiteSpace: 'nowrap',
               }
             : {
+                position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
                 borderRadius: 7, fontSize: 13, fontWeight: 500,
                 border: `1px solid ${active ? 'var(--eh-primary)' : 'var(--eh-border)'}`,
@@ -80,7 +82,36 @@ function FilterDropdown({
               }
         }
       >
-        {label}{badge ? ` (${badge})` : ''}
+        {label}
+        {/* Badge SOBREPOSTO (`position: absolute`), não concatenado no texto
+            do rótulo — um contador inline (`Etiquetas (1)`) muda a largura
+            do próprio botão a cada seleção, empurrando os filtros seguintes
+            e tudo à direita deles (busca, "Mostrar arquivadas", abas). Mais
+            visível numa barra cheia sem vão elástico sobrando (o cabeçalho
+            do Calendário, por exemplo) do que no Quadro, mas o bug era do
+            componente compartilhado — corrigido aqui pros dois. */}
+        {badge ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: -5,
+              right: -5,
+              minWidth: 15,
+              height: 15,
+              padding: '0 3px',
+              borderRadius: 999,
+              fontSize: 9.5,
+              fontWeight: 700,
+              lineHeight: '15px',
+              textAlign: 'center',
+              background: pedagogia ? 'var(--eh-pm-header-fg)' : 'var(--eh-primary)',
+              color: pedagogia ? 'var(--eh-pm-header-fg-inverse)' : 'var(--eh-surface)',
+            }}
+          >
+            {badge}
+          </span>
+        ) : null}
       </button>
       {open && (
         <div
