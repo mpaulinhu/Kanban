@@ -565,6 +565,7 @@ export function buildSeedState(): KanbanState {
       Object.entries(COMMENTS).map(([taskId, thread]) => [taskId, thread.map((c) => ({ ...c }))]),
     ),
     attachmentBlobs: {},
+    users: SEED_USERS.map((u) => ({ ...u })),
   }
 }
 

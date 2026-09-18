@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { UserRecord } from '../api/usersApi'
+import { usersApi, type UserRecord } from '../api/usersApi'
 import { updatePMProject } from '../api/pmOfficeApi'
 import { onlyInternalUsers } from '@/lib/internalDomains'
 
@@ -10,19 +10,37 @@ interface TeamModalProps {
   team: string[]
   onClose: () => void
   onSave: (newTeam: string[]) => void
+  /**
+   * Chamado depois que um usuário novo é criado com sucesso, com a lista
+   * ATUALIZADA (já incluindo o recém-criado) — o `KanbanBoardPage` carrega
+   * `users` uma vez no mount (`usersApi.listUsers()` em `useEffect([])`), sem
+   * assinatura viva; sem este callback o usuário criado só apareceria fora
+   * deste modal depois de um F5.
+   */
+  onUsersChange: (users: UserRecord[]) => void
 }
 
-export function TeamModal({ open, projectId, users, team, onClose, onSave }: TeamModalProps) {
+export function TeamModal({ open, projectId, users, team, onClose, onSave, onUsersChange }: TeamModalProps) {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  // Formulário "Criar nova conta" — colapsado por padrão, expande sob demanda.
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [createError, setCreateError] = useState('')
+  const [createLoading, setCreateLoading] = useState(false)
 
   // Reinicia seleção e busca quando o modal abre
   useEffect(() => {
     if (!open) return
     setSearch('')
     setSelected(new Set(team))
+    setCreatingUser(false)
+    setNewName('')
+    setNewEmail('')
+    setCreateError('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -54,6 +72,36 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
       else next.add(uid)
       return next
     })
+  }
+
+  /**
+   * Cria a conta e já adiciona o usuário à equipe selecionada — quem abriu
+   * "Criar nova conta" a partir de uma busca sem resultado quer essa pessoa
+   * na equipe, não só cadastrada; exigir marcar o checkbox depois seria um
+   * passo a mais sem propósito.
+   */
+  async function handleCreateUser() {
+    setCreateError('')
+    const name = newName.trim()
+    const email = newEmail.trim()
+    if (!name || !email) {
+      setCreateError('Preencha nome e e-mail.')
+      return
+    }
+    setCreateLoading(true)
+    try {
+      const { uid } = await usersApi.createUser({ name, email, password: '', role: 'editor' })
+      const updated = await usersApi.listUsers()
+      onUsersChange(updated)
+      setSelected((prev) => new Set(prev).add(uid))
+      setCreatingUser(false)
+      setNewName('')
+      setNewEmail('')
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Não foi possível criar o usuário.')
+    } finally {
+      setCreateLoading(false)
+    }
   }
 
   async function handleSave() {
@@ -191,17 +239,128 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave }: Tea
           />
         </div>
 
+        {/* Criar nova conta — colapsado por padrão, expande sob demanda.
+            Fica logo abaixo da busca (não só quando ela não acha ninguém):
+            descobrível sem depender de o usuário já ter tentado e falhado. */}
+        <div style={{ padding: '0 24px 8px', flexShrink: 0 }}>
+          {!creatingUser ? (
+            <button
+              type="button"
+              onClick={() => setCreatingUser(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                color: 'var(--eh-primary)', background: 'none', border: 'none',
+                cursor: 'pointer', padding: '4px 2px',
+              }}
+            >
+              <span style={{ fontSize: 15, lineHeight: 1 }}>+</span>
+              Criar nova conta
+            </button>
+          ) : (
+            <div
+              style={{
+                border: '1px solid var(--eh-border)', borderRadius: 10,
+                padding: 12, background: 'var(--eh-bg)',
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--eh-text-2)' }}>
+                Nova conta
+              </p>
+              <input
+                type="text"
+                placeholder="Nome"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '7px 10px',
+                  border: '1px solid var(--eh-border)', borderRadius: 7,
+                  fontSize: 13, fontFamily: 'inherit',
+                  color: 'var(--eh-text)', background: 'var(--eh-surface)',
+                  outline: 'none',
+                }}
+              />
+              <input
+                type="email"
+                placeholder="E-mail"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleCreateUser() }}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '7px 10px',
+                  border: '1px solid var(--eh-border)', borderRadius: 7,
+                  fontSize: 13, fontFamily: 'inherit',
+                  color: 'var(--eh-text)', background: 'var(--eh-surface)',
+                  outline: 'none',
+                }}
+              />
+              {createError && (
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--eh-danger, #dc2626)' }}>{createError}</p>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => { setCreatingUser(false); setCreateError('') }}
+                  disabled={createLoading}
+                  style={{
+                    fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+                    color: 'var(--eh-text-2)', background: 'none',
+                    border: 'none', borderRadius: 7, padding: '6px 10px',
+                    cursor: createLoading ? 'default' : 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateUser()}
+                  disabled={createLoading || !newName.trim() || !newEmail.trim()}
+                  style={{
+                    fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+                    color: 'var(--eh-surface)',
+                    background: createLoading || !newName.trim() || !newEmail.trim() ? 'var(--eh-muted-2)' : 'var(--eh-text-strong)',
+                    border: 'none', borderRadius: 7, padding: '6px 12px',
+                    cursor: createLoading || !newName.trim() || !newEmail.trim() ? 'default' : 'pointer',
+                  }}
+                >
+                  {createLoading ? 'Criando…' : 'Criar conta'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Lista de usuários */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 8px' }}>
           {filtered.length === 0 ? (
-            <p
-              style={{
-                textAlign: 'center', color: 'var(--eh-text-2)',
-                fontSize: 13, padding: '20px 0',
-              }}
-            >
-              Nenhum usuário encontrado.
-            </p>
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <p style={{ margin: '0 0 6px', color: 'var(--eh-text-2)', fontSize: 13 }}>
+                Nenhum usuário encontrado{q ? ` para "${search.trim()}"` : ''}.
+              </p>
+              {!creatingUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreatingUser(true)
+                    // Busca vazia costuma ser um nome — pré-preenche o campo
+                    // de nome pra não obrigar a pessoa a digitar de novo o
+                    // que já tinha digitado na busca.
+                    if (q && !newName) setNewName(search.trim())
+                  }}
+                  style={{
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                    color: 'var(--eh-primary)', background: 'none', border: 'none',
+                    cursor: 'pointer', padding: '2px 4px',
+                  }}
+                >
+                  + Criar conta{q ? ` para "${search.trim()}"` : ''}
+                </button>
+              )}
+            </div>
           ) : (
             filtered.map((u) => {
               const checked = selected.has(u.uid)

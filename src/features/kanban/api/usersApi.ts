@@ -8,7 +8,7 @@
  */
 
 // `seed.ts` importa daqui só o TIPO `UserRecord` — sem ciclo em runtime.
-import { SEED_USERS } from './seed'
+import { getState, mutate, newId } from './store'
 
 export type Department = string
 export type DepartmentRoles = Record<string, string>
@@ -33,7 +33,7 @@ export interface UserRecord {
 }
 
 async function listUsers(opts?: { includeInactive?: boolean }): Promise<UserRecord[]> {
-  const all = SEED_USERS.map((u) => ({ ...u }))
+  const all = getState().users.map((u) => ({ ...u }))
   return opts?.includeInactive ? all : all.filter((u) => u.isActive)
 }
 
@@ -41,7 +41,18 @@ function notSupported(operation: string): Promise<never> {
   return Promise.reject(new Error(`[usersApi] "${operation}" exige backend — indisponível na versão de demonstração.`))
 }
 
-async function createUser(_params: {
+/**
+ * Cria um usuário DE VERDADE dentro do estado em memória (persistido em
+ * `localStorage` via `mutate`) — não é um cadastro real (não há senha, e-mail
+ * de confirmação nem autenticação por trás), mas o usuário criado passa a
+ * existir na lista igual a qualquer um do seed: aparece em "Equipe do
+ * projeto", pode ser atribuído a tarefas, sobrevive a um reload.
+ *
+ * Antes este era um stub que rejeitava com "exige backend" — não havia lugar
+ * pra gravar (usuários viviam só em `SEED_USERS`, array estático). Agora
+ * `KanbanState.users` é mutável, então a operação tem onde escrever.
+ */
+async function createUser(params: {
   name: string
   email: string
   password: string
@@ -50,7 +61,28 @@ async function createUser(_params: {
   departmentRoles?: DepartmentRoles
   screenRoleOverrides?: ScreenRoleOverrides
 }): Promise<{ uid: string }> {
-  return notSupported('createUser')
+  const name = params.name.trim()
+  const email = params.email.trim().toLowerCase()
+  if (!name) throw new Error('Nome é obrigatório.')
+  if (!email || !email.includes('@')) throw new Error('E-mail inválido.')
+  if (getState().users.some((u) => u.email.toLowerCase() === email)) {
+    throw new Error('Já existe um usuário com este e-mail.')
+  }
+
+  const uid = newId('user')
+  const record: UserRecord = {
+    uid,
+    name,
+    email,
+    role: params.role,
+    department: params.department ?? null,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  }
+  mutate((draft) => {
+    draft.users.push(record)
+  })
+  return { uid }
 }
 
 async function updateRole(

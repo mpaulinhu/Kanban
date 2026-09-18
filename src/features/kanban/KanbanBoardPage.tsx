@@ -2450,6 +2450,7 @@ export function KanbanBoardPage() {
         team={projectTeam}
         onClose={() => setTeamModalOpen(false)}
         onSave={(newTeam) => setProjectTeam(newTeam)}
+        onUsersChange={setUsers}
       />
     </div>
   )

@@ -16,6 +16,10 @@ import type {
   PMTask,
   PMTaskComment,
 } from '../types/pmOffice'
+// Só o TIPO — sem ciclo em runtime (mesmo padrão que `seed.ts` já usa pra
+// importar `UserRecord` de `usersApi.ts`, que por sua vez importa `SEED_USERS`
+// deste módulo via `seed.ts`).
+import type { UserRecord } from './usersApi'
 
 // ── Timestamp ────────────────────────────────────────────────────────────────
 
@@ -120,6 +124,15 @@ export interface KanbanState {
   comments: Record<string, PMTaskComment[]>
   /** Chaveado pelo `storagePath` sintético do anexo. */
   attachmentBlobs: Record<string, AttachmentBlob>
+  /**
+   * Usuários do workspace — inicializado a partir de `SEED_USERS`, mas
+   * MUTÁVEL a partir daqui: `usersApi.createUser` grava aqui via `mutate()`,
+   * o que persiste em `localStorage` como o resto do estado. Antes vivia só
+   * em `SEED_USERS` (array estático em `seed.ts`), e `createUser` era um stub
+   * que rejeitava com "exige backend" — sem lugar pra gravar um usuário novo,
+   * a única opção era recusar. Agora tem.
+   */
+  users: UserRecord[]
 }
 
 // v2: mudança de schema nos dados de exemplo (`trelloColor`→`colorKey`,
