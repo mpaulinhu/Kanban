@@ -10,8 +10,12 @@ import { AssigneeAvatars } from './AssigneeAvatars'
 import { LabelChips } from './LabelChips'
 import { UserProfilePopover } from '@/components/UserProfilePopover'
 
-/** Resolve a foto do usuário por nome exato (case-insensitive), só quando único — ambíguo não resolve. */
-function findPhotoByName(name: string, users: UserRecord[]): string | undefined {
+/**
+ * Exportada porque `DayView` (MarketingCalendarioPage.tsx) reusa a mesma
+ * regra de resolução de foto pra montar o card de tarefa da visão Dia, sem
+ * duplicar a lógica.
+ */
+export function findPhotoByName(name: string, users: UserRecord[]): string | undefined {
   const target = name.trim().toLowerCase()
   const matches = users.filter((u) => u.name.trim().toLowerCase() === target)
   return matches.length === 1 ? matches[0].photoURL : undefined
@@ -48,7 +52,11 @@ const HIGHLIGHT_ANIMATION = 'eh-task-highlight-pulse 2s ease-in-out 1'
  */
 const HIGHLIGHT_FADE_OUT_TRANSITION = 'background-color 350ms ease-out'
 
-const STATUS_DOT: Record<string, string> = {
+/**
+ * Exportado: `DayView` (MarketingCalendarioPage.tsx) usa a mesma paleta pro
+ * card de tarefa da visão Dia — mesmas 4 cores, sem duplicar a definição.
+ */
+export const STATUS_DOT: Record<string, string> = {
   todo: 'var(--eh-muted-2)',
   // Laranja, não azul — pareado de propósito com o chip de status do
   // cabeçalho do modal (STATUS_CHIP_CFG em TaskDetailModal.tsx), que já
@@ -68,14 +76,16 @@ const STATUS_DOT: Record<string, string> = {
  * oferecê-lo aqui como escolha manual quebraria essa reversão automática.
  * Uma tarefa atrasada continua mostrando o rótulo correto no menu, e
  * escolher qualquer opção daqui a tira do estado atrasado.
+ *
+ * Exportada: `DayView` reusa o mesmo seletor de status.
  */
-const CARD_STATUS_OPTIONS: { value: PMTask['status']; label: string }[] = [
+export const CARD_STATUS_OPTIONS: { value: PMTask['status']; label: string }[] = [
   { value: 'todo', label: 'A fazer' },
   { value: 'in_progress', label: 'Em andamento' },
   { value: 'done', label: 'Concluída' },
 ]
 
-const CARD_STATUS_LABEL: Record<string, string> = {
+export const CARD_STATUS_LABEL: Record<string, string> = {
   todo: 'A fazer',
   in_progress: 'Em andamento',
   done: 'Concluída',
@@ -105,7 +115,8 @@ function toDate(ts: unknown): Date | null {
   return typeof secs === 'number' ? new Date(secs * 1000) : null
 }
 
-function fmtDate(d: Date): string {
+/** Exportada: `DayTaskCard` (MarketingCalendarioPage.tsx) usa o mesmo formato de data. */
+export function fmtDate(d: Date): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
 }
 

@@ -21,6 +21,7 @@ import {
   addChecklistItem,
   deleteChecklistItem,
   getOrCreateAreaProject,
+  markTaskDone,
   subscribeMarketingTasks,
   subscribePMOfficeLabels,
   toggleChecklistItem,
@@ -31,6 +32,15 @@ import {
 import { updatePMTask } from '../api/pmOfficeApi'
 import { TaskDetailModal } from '../components/TaskDetailModal'
 import { TeamModal } from '../components/TeamModal'
+import { LabelChips } from '../components/LabelChips'
+import { AssigneeAvatars } from '../components/AssigneeAvatars'
+import {
+  STATUS_DOT,
+  CARD_STATUS_OPTIONS,
+  CARD_STATUS_LABEL,
+  findPhotoByName,
+  fmtDate,
+} from '../components/MarketingKanbanCard'
 import { StartDateToast } from '@/components/Toast'
 // Mesmos dropdowns/estilo do Quadro (KanbanBoardPage) — ver comentário
 // acima do bloco de filtros mais abaixo para o porquê da paridade.
@@ -53,17 +63,6 @@ const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ]
-
-// Mesma paleta do card do Quadro (`MarketingKanbanCard.STATUS_DOT`) — laranja
-// em `in_progress` (não azul) pra bater com o chip de status do modal, e
-// `atrasado` com entrada própria (antes ausente aqui, caía num fallback
-// cinza que nenhum outro ponto do app usa mais para esse status).
-const STATUS_DOT: Record<string, string> = {
-  todo: 'var(--eh-muted-2)',
-  in_progress: '#f97316',
-  done: '#22c55e',
-  atrasado: '#ef4444',
-}
 
 /**
  * Opções do filtro de Status no header — sem "Concluída": tarefa `done` já é
@@ -458,41 +457,195 @@ function WeekView({ weekDays, tasksByDay, today, onTaskClick }: WeekViewProps) {
 }
 
 // Dia: clicar numa tarefa abre o modal
+/**
+ * Card de tarefa da visão Dia — visual pareado com `MarketingKanbanCard`
+ * (etiqueta, chip de status clicável, data, avatares dos responsáveis), mas
+ * SEM as partes que só fazem sentido dentro de uma coluna do Quadro: sem
+ * arrasto (`useSortable` exige um `SortableContext`, que esta tela não tem —
+ * um dia não é uma coluna) e sem menu "Mover para outra coluna"/"Clonar"
+ * (não existe coluna de destino aqui). Clicar no corpo do card abre o mesmo
+ * `TaskDetailModal` que o Quadro usa.
+ */
+function DayTaskCard({
+  task,
+  today,
+  onOpen,
+  onChangeStatus,
+  users,
+  labelsById,
+}: {
+  task: PMTask
+  today: Date
+  onOpen: () => void
+  onChangeStatus: (next: PMTask['status']) => void
+  users: UserRecord[]
+  labelsById: Map<string, PMOfficeLabel>
+}) {
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  const taskDate = toDate(task.dueDate)
+  const overdue = taskDate !== null && taskDate < today && task.status !== 'done'
+  const names = task.assigneesNames ?? []
+
+  return (
+    <div
+      style={{
+        padding: '12px 14px',
+        borderRadius: 10,
+        border: '1px solid var(--eh-border)',
+        background: 'var(--eh-surface)',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
+        cursor: 'pointer',
+      }}
+      onClick={onOpen}
+    >
+      {task.labels && task.labels.length > 0 && (
+        <LabelChips labelIds={task.labels} labelsById={labelsById} />
+      )}
+      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--eh-text)', lineHeight: 1.4 }}>
+        {task.title}
+      </p>
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          {/* Chip de status clicável — mesmas 3 opções e mesma paleta do
+              menu "⋯" do card do Quadro (STATUS_DOT/CARD_STATUS_OPTIONS,
+              importados de MarketingKanbanCard.tsx). */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setStatusMenuOpen((v) => !v) }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 11.5,
+              fontWeight: 600,
+              color: 'var(--eh-text-2)',
+              background: 'var(--eh-bg)',
+              border: '1px solid var(--eh-border)',
+              borderRadius: 20,
+              padding: '3px 9px 3px 7px',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_DOT[task.status] ?? 'var(--eh-muted-2)', flexShrink: 0 }} />
+            {CARD_STATUS_LABEL[task.status] ?? task.status}
+          </button>
+          {statusMenuOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                marginTop: 4,
+                zIndex: 20,
+                background: 'var(--eh-surface)',
+                border: '1px solid var(--eh-border)',
+                borderRadius: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+                padding: 4,
+                minWidth: 150,
+              }}
+            >
+              {CARD_STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => { onChangeStatus(opt.value); setStatusMenuOpen(false) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 7, width: '100%', textAlign: 'left',
+                    fontSize: 12.5, fontWeight: task.status === opt.value ? 600 : 500,
+                    color: task.status === opt.value ? 'var(--eh-text-strong)' : 'var(--eh-text-2)',
+                    background: 'transparent', border: 'none', borderRadius: 5, padding: '6px 8px', cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--eh-bg)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: STATUS_DOT[opt.value] }} />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {taskDate && (
+            <span
+              style={{
+                fontSize: 11.5,
+                fontWeight: 500,
+                color: overdue ? 'var(--eh-danger)' : 'var(--eh-text-2)',
+                background: overdue ? 'var(--eh-danger-hover, var(--eh-danger-bg))' : 'transparent',
+                padding: overdue ? '2px 6px' : 0,
+                borderRadius: 4,
+                flexShrink: 0,
+              }}
+            >
+              {fmtDate(taskDate)}
+            </span>
+          )}
+        </div>
+        {names.length > 0 && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <AssigneeAvatars
+              names={names}
+              photoURLs={names.map((name) => findPhotoByName(name, users))}
+              max={3}
+              size={22}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 interface DayViewProps {
   date: Date
   tasksByDay: Record<string, PMTask[]>
   today: Date
   onTaskClick: (task: PMTask) => void
+  onChangeStatus: (task: PMTask, next: PMTask['status']) => void
+  users: UserRecord[]
+  labelsById: Map<string, PMOfficeLabel>
 }
 
-function DayView({ date, tasksByDay, today, onTaskClick }: DayViewProps) {
+function DayView({ date, tasksByDay, today, onTaskClick, onChangeStatus, users, labelsById }: DayViewProps) {
   const tasks = tasksByDay[dayKey(date)] ?? []
   const isToday = isSameDay(date, today)
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-      <p style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 700, color: isToday ? 'var(--eh-primary)' : 'var(--eh-text-strong)' }}>
-        {WEEK_DAYS[date.getDay()]}, {date.getDate()} de {MONTHS[date.getMonth()]} de {date.getFullYear()}
-      </p>
+      {/* Cabeçalho do dia — card com fundo próprio: uma linha de texto solta
+          sobre o gradiente do header (versão anterior) ficava com contraste
+          ruim e sem destaque de "tela de detalhe". */}
+      <div
+        style={{
+          padding: '14px 18px',
+          borderRadius: 10,
+          marginBottom: 16,
+          background: isToday ? 'var(--eh-primary-soft, var(--eh-surface))' : 'var(--eh-surface)',
+          border: `1px solid ${isToday ? 'var(--eh-primary)' : 'var(--eh-border)'}`,
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: isToday ? 'var(--eh-primary)' : 'var(--eh-text-strong)' }}>
+          {WEEK_DAYS[date.getDay()]}, {date.getDate()} de {MONTHS[date.getMonth()]} de {date.getFullYear()}
+        </p>
+        <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--eh-text-2)' }}>
+          {tasks.length === 0 ? 'Nenhuma tarefa' : tasks.length === 1 ? '1 tarefa' : `${tasks.length} tarefas`}
+        </p>
+      </div>
       {tasks.length === 0 ? (
         <p style={{ margin: 0, fontSize: 13, color: 'var(--eh-muted-2)' }}>Nenhuma tarefa para este dia.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {tasks.map((task) => {
-            const taskDate = toDate(task.dueDate)
-            const overdue = taskDate !== null && taskDate < today
-            return (
-              <div
-                key={task.id}
-                onClick={() => onTaskClick(task)}
-                style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--eh-border)', background: overdue ? 'var(--eh-danger-hover, var(--eh-danger-bg))' : 'var(--eh-surface)', display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}
-              >
-                <span style={{ width: 7, height: 7, borderRadius: '50%', marginTop: 3, flexShrink: 0, background: STATUS_DOT[task.status] ?? 'var(--eh-muted-2)' }} />
-                <span style={{ fontSize: 13, color: overdue ? 'var(--eh-danger)' : 'var(--eh-text-3)', lineHeight: 1.4 }}>
-                  {task.title}
-                </span>
-              </div>
-            )
-          })}
+          {tasks.map((task) => (
+            <DayTaskCard
+              key={task.id}
+              task={task}
+              today={today}
+              onOpen={() => onTaskClick(task)}
+              onChangeStatus={(next) => onChangeStatus(task, next)}
+              users={users}
+              labelsById={labelsById}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -736,6 +889,10 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
     return filtered.length > 0 ? filtered : users
   }, [users, projectTeam])
 
+  // Dicionário de etiquetas por id — o card da visão Dia usa pra montar os
+  // chips (`LabelChips`), mesmo padrão do Quadro (`KanbanBoardPage.labelsById`).
+  const labelsById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels])
+
   /** Mesma função do Quadro — ver `KanbanBoardPage.matchesLabelFilter`. */
   function matchesLabelFilter(t: PMTask): boolean {
     if (labelFilter.length === 0) return true
@@ -837,6 +994,51 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
   function openTask(task: PMTask) {
     setExpandedTaskId(task.id)
     setModalOpen(true)
+  }
+
+  /**
+   * Troca o status pelo chip do card da visão Dia — mesma semântica de
+   * `KanbanBoardPage.handleChangeTaskStatus`, replicada aqui porque o
+   * Calendário tem seu próprio caminho de tarefas/audit:
+   *  - `progress` 100 ao concluir, 0 ao voltar para "A fazer";
+   *  - checklist inteiro marcado como finalizado na transição para done;
+   *  - `markTaskDone` para tarefa recorrente com prazo.
+   * Concluir tira a tarefa da grade (regra pré-existente: `done` nunca
+   * aparece em nenhuma visão do calendário) — o chip aqui é sobretudo pra
+   * corrigir status errado sem abrir o modal, ou reabrir uma já concluída
+   * por engano por outro caminho.
+   */
+  async function handleDayCardStatusChange(task: PMTask, next: PMTask['status']) {
+    if (!projectId || next === task.status) return
+    const isDone = next === 'done'
+    const patch: Record<string, unknown> = { status: next }
+    if (isDone) patch.progress = 100
+    else if (next === 'todo') patch.progress = 0
+    if (isDone && (task.checklist?.length ?? 0) > 0) {
+      patch.checklist = (task.checklist ?? []).map((item) => ({
+        ...item,
+        isChecked: true,
+        status: 'finalizado' as const,
+      }))
+      patch.checklistDone = task.checklist?.length ?? 0
+    }
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? ({ ...t, ...patch } as PMTask) : t)))
+    try {
+      await updatePMTask(projectId, task.bucketId, task.id, patch, {
+        clearPreviousStatusBeforeAtrasado: !!task.previousStatusBeforeAtrasado,
+      })
+      audit.logTask(
+        isDone && task.status !== 'done' ? 'pm_task.done' : 'pm_task.update',
+        { id: task.id, title: task.title },
+        { bucketId: task.bucketId, changes: [{ field: 'status', before: task.status, after: next }] },
+      )
+      if (isDone && task.status !== 'done' && task.recurrence && task.dueDate) {
+        markTaskDone(projectId, task.bucketId, { ...task, ...patch } as PMTask).catch(console.error)
+      }
+    } catch (err) {
+      console.error('[handleDayCardStatusChange] falhou ao mudar status:', err)
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)))
+    }
   }
 
   // Ao soltar um card sobre uma célula de dia do MonthView, reagenda a tarefa.
@@ -1150,6 +1352,9 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
               tasksByDay={tasksByDay}
               today={today}
               onTaskClick={openTask}
+              onChangeStatus={(task, next) => void handleDayCardStatusChange(task, next)}
+              users={users}
+              labelsById={labelsById}
             />
           )}
 
