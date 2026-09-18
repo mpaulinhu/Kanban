@@ -6,7 +6,7 @@ import { RecurrenceControl } from './RecurrenceControl'
 import type { PMTaskPatch } from '../api/pmOfficeApi'
 import { applyLazyOverdueTransition, updatePMTask } from '../api/pmOfficeApi'
 import { tsFromDate, type Timestamp } from '../api/store'
-import { applyTemplateToTaskChecklist } from '../api/marketingPlannerApi'
+import { applyTemplateToTaskChecklist, markTaskDone } from '../api/marketingPlannerApi'
 import { onlyInternalUsers } from '@/lib/internalDomains'
 import type { UserRecord } from '../api/usersApi'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -624,6 +624,53 @@ export function TaskDetailModal({
   }
 
   /**
+   * Grava o status IMEDIATAMENTE a partir do chip do cabeçalho, sem esperar
+   * `handleSave` — mesma semântica do seletor de status do card
+   * (`KanbanBoardPage.handleChangeTaskStatus`), replicada aqui porque o
+   * modal tem seu próprio caminho de escrita (`saveField`/`updatePMTask`
+   * direto, sem passar pelo board):
+   *  - `progress` 100 ao concluir, 0 ao voltar para "A fazer" (em andamento
+   *    preserva o progresso existente);
+   *  - checklist inteiro marcado como finalizado na transição para done;
+   *  - `clearPreviousStatusBeforeAtrasado`, porque é escolha MANUAL — sem
+   *    isso uma reversão automática futura (prazo adiado) desfaria o que o
+   *    usuário escolheu aqui;
+   *  - `markTaskDone` para tarefa recorrente com prazo.
+   *
+   * Atualiza `status` local (o `<select>` antigo saiu do corpo, mas outros
+   * pontos do formulário — o gate de `requireDueDate`, o autofill de
+   * `startDate` em `handleSave` — ainda leem esse estado) e notifica
+   * `onSave` para o board refletir a mudança na lista por trás do modal.
+   */
+  async function saveStatus(next: PMTask['status']) {
+    if (!task || next === task.status) return
+    const previousStatus = task.status
+    const isDone = next === 'done'
+
+    const patch: PMTaskPatch = { status: next }
+    if (isDone) patch.progress = 100
+    else if (next === 'todo') patch.progress = 0
+    if (isDone && (task.checklist?.length ?? 0) > 0) {
+      patch.checklist = (task.checklist ?? []).map((item) => ({
+        ...item,
+        isChecked: true,
+        status: 'finalizado' as const,
+      }))
+      patch.checklistDone = task.checklist?.length ?? 0
+    }
+
+    setStatus(next)
+    await updatePMTask(task.projectId, task.bucketId, task.id, patch, {
+      clearPreviousStatusBeforeAtrasado: !!task.previousStatusBeforeAtrasado,
+    })
+    const updatedTask: PMTask = { ...task, ...patch }
+    onSave?.(updatedTask)
+    if (isDone && previousStatus !== 'done' && task.recurrence && task.dueDate) {
+      markTaskDone(task.projectId, task.bucketId, updatedTask).catch(console.error)
+    }
+  }
+
+  /**
    * (modo "documento" da Pedagogia): grava recorrência IMEDIATAMENTE
    * a cada mudança no `RecurrenceControl`, em vez de esperar um Salvar final
    * que não existe mais nesse modo. Mesmo par `setDoc`/`updateDoc` de
@@ -867,20 +914,72 @@ export function TaskDetailModal({
                 mesma posição da captura real, onde os ícones ficam alinhados
                 ao chip, não ao título (que pode quebrar em várias linhas). */}
             <div className="flex items-center justify-between gap-2">
-              {bucketName ? (
-                <span
-                  className="shrink-0 inline-flex items-center gap-1 font-semibold px-2 py-1"
-                  // Correção de contraste: --eh-text-2 (#67746f) sobre
-                  // --eh-pm-neutral-surface (#f1f2f4) media 4,36:1 — abaixo do
-                  // piso AA (4,5:1). --eh-pm-modal-text mede 12,80:1 no claro.
-                  style={{ background: 'var(--eh-pm-neutral-surface)', color: 'var(--eh-pm-modal-text)', borderRadius: 4, fontSize: 12 }}
-                >
-                  {bucketName.toUpperCase()}
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </span>
-              ) : <span />}
+              <div className="flex items-center gap-2 min-w-0">
+                {bucketName ? (
+                  // Chip PURAMENTE informativo — sem seta. Antes tinha um
+                  // chevron decorativo que sugeria ser clicável (abrir/trocar
+                  // coluna) sem fazer nada; removido para não prometer uma
+                  // interação que não existe. Trocar de coluna continua
+                  // disponível pelo menu "⋯" do card ("Mover para").
+                  <span
+                    className="shrink-0 font-semibold px-2 py-1"
+                    // Correção de contraste: --eh-text-2 (#67746f) sobre
+                    // --eh-pm-neutral-surface (#f1f2f4) media 4,36:1 — abaixo do
+                    // piso AA (4,5:1). --eh-pm-modal-text mede 12,80:1 no claro.
+                    style={{ background: 'var(--eh-pm-neutral-surface)', color: 'var(--eh-pm-modal-text)', borderRadius: 4, fontSize: 12 }}
+                  >
+                    {bucketName.toUpperCase()}
+                  </span>
+                ) : null}
+                {/* Chip de status — ESTE sim é clicável: `<select>` nativo
+                    transparente sobreposto ao chip visual (mesma técnica do
+                    resto do app para controles que precisam parecer um chip
+                    mas abrir uma lista nativa, acessível por teclado sem
+                    reimplementar popover/portal). Grava na hora via
+                    `saveStatus`, sem esperar o Salvar do formulário — troquei
+                    o antigo <select> de status do corpo do modal por este,
+                    não duplica o campo. */}
+                {isEditable && !readOnly && !rawStatusOptions && !task.rawStatus && !ACCESSIBILITY_RAW_OPTIONS[task.title] ? (
+                  <span className="relative shrink-0 inline-flex items-center">
+                    <span
+                      aria-hidden="true"
+                      className="inline-flex items-center gap-1 font-semibold px-2 py-1 pointer-events-none"
+                      style={{
+                        background: (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).bg,
+                        color: status === 'atrasado' ? '#b91c1c' : (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).fg,
+                        borderRadius: 4,
+                        fontSize: 12,
+                      }}
+                    >
+                      {STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
+                    <select
+                      aria-label="Status da tarefa"
+                      value={status}
+                      onChange={(e) => void saveStatus(e.target.value as PMTask['status'])}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      style={{ fontSize: 12 }}
+                    >
+                      {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </span>
+                ) : (
+                  <span
+                    className="shrink-0 font-semibold px-2 py-1"
+                    style={{
+                      background: (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).bg,
+                      color: status === 'atrasado' ? '#b91c1c' : (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).fg,
+                      borderRadius: 4,
+                      fontSize: 12,
+                    }}
+                  >
+                    {STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 {!isEditable && (
                   <span className="shrink-0 text-xs px-2 py-0.5 rounded" style={{ background: 'var(--eh-surface-2)', color: 'var(--eh-text-2)', border: '1px solid var(--eh-border)' }}>
@@ -1083,55 +1182,57 @@ export function TaskDetailModal({
                   className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Status</label>
-                  {ACCESSIBILITY_RAW_OPTIONS[task.title] ? (
-                    <select
-                      value={rawStatus}
-                      onChange={e => {
-                        setRawStatus(e.target.value)
-                        setStatus(rawToStandard(e.target.value, task.title))
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      {ACCESSIBILITY_RAW_OPTIONS[task.title].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  ) : rawStatusOptions ? (
-                    <select
-                      value={rawStatus}
-                      onChange={e => {
-                        setRawStatus(e.target.value)
-                        setStatus(radioNovelaRawToStandard(e.target.value))
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      {rawStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  ) : task.rawStatus ? (
-                    /* Status calculado das subtarefas — read-only no modal da tarefa pai */
-                    <div style={{ display: 'flex', alignItems: 'center', height: 36, gap: 10 }}>
-                      {(() => {
-                        const cfg = PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo
-                        return (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: cfg.bg, color: cfg.fg }}>
-                            {task.rawStatus}
-                          </span>
-                        )
-                      })()}
-                      <span style={{ fontSize: 11, color: 'var(--eh-muted-2)' }}>calculado das subtarefas</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={status}
-                      onChange={e => setStatus(e.target.value as PMTask['status'])}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  )}
+              {/* Status "simples" (os 4 valores padrão) saiu daqui — agora é o
+                  chip clicável no cabeçalho do modal, ao lado do nome da
+                  coluna, e grava na hora via `saveStatus`. Os três vocabulários
+                  GRANULARES abaixo continuam no corpo: não têm equivalente no
+                  chip (que só conhece STATUS_OPTIONS) e cada um já tinha sua
+                  própria UI antes desta mudança. */}
+              {(ACCESSIBILITY_RAW_OPTIONS[task.title] || rawStatusOptions || task.rawStatus) && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Status</label>
+                    {ACCESSIBILITY_RAW_OPTIONS[task.title] ? (
+                      <select
+                        value={rawStatus}
+                        onChange={e => {
+                          setRawStatus(e.target.value)
+                          setStatus(rawToStandard(e.target.value, task.title))
+                        }}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {ACCESSIBILITY_RAW_OPTIONS[task.title].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : rawStatusOptions ? (
+                      <select
+                        value={rawStatus}
+                        onChange={e => {
+                          setRawStatus(e.target.value)
+                          setStatus(radioNovelaRawToStandard(e.target.value))
+                        }}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {rawStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      /* Status calculado das subtarefas — read-only no modal da tarefa pai */
+                      <div style={{ display: 'flex', alignItems: 'center', height: 36, gap: 10 }}>
+                        {(() => {
+                          const cfg = PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo
+                          return (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: cfg.bg, color: cfg.fg }}>
+                              {task.rawStatus}
+                            </span>
+                          )
+                        })()}
+                        <span style={{ fontSize: 11, color: 'var(--eh-muted-2)' }}>calculado das subtarefas</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
+              )}
+              <div>
+                <div className="max-w-[calc(50%-8px)]">
                   <label className="block text-sm font-medium mb-1">Prioridade</label>
                   <select
                     value={priority}
