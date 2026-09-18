@@ -1079,8 +1079,33 @@ export function KanbanBoardPage() {
       // o que fazia a "Ordem manual" não segurar o arrasto.
       const currentIds = localTaskOrder[bucketId] ?? tasksByBucket[bucketId]?.map((t) => t.id) ?? []
       const oldIndex = currentIds.indexOf(String(active.id))
-      const newIndex = currentIds.indexOf(String(over.id))
-      if (oldIndex === -1 || newIndex === -1) return
+      const rawNewIndex = currentIds.indexOf(String(over.id))
+      if (oldIndex === -1 || rawNewIndex === -1) return
+      // `over.id` é só "o card mais próximo" (closestCenter) — não diz de que
+      // LADO o cursor está. `arrayMove(arr, oldIndex, rawNewIndex)` sempre
+      // insere NA posição de `overTask`, o que empurra `overTask` pra trás.
+      // Isso é o comportamento certo quando `oldIndex > rawNewIndex`
+      // (arrastando de baixo pra cima: soltar no topo de um card = ficar
+      // antes dele, e ele fica onde estava — 1 posição adiante). Mas quando
+      // `oldIndex < rawNewIndex` (arrastando de cima pra baixo) o mesmo
+      // `arrayMove` faz `overTask` pular pra ANTES do card arrastado — soltar
+      // no topo de um card empurrava ele pra baixo, o oposto do que o cursor
+      // mostrava. Medido e reproduzido: arrastar pra baixo e soltar no topo
+      // do alvo sempre pousava DEPOIS dele, nunca antes.
+      //
+      // Corrigido comparando o centro vertical do card arrastado (posição
+      // ATUAL, com a translação do drag já aplicada) contra o centro do card
+      // de destino: se o arrasto é pra baixo E o cursor ainda está acima do
+      // centro do alvo, a intenção é ficar ANTES dele — usa `rawNewIndex - 1`
+      // em vez do índice do próprio alvo.
+      const activeRect = active.rect.current.translated
+      const overRect = over.rect
+      const droppingAboveTargetCenter =
+        !!activeRect && activeRect.top + activeRect.height / 2 < overRect.top + overRect.height / 2
+      const newIndex =
+        oldIndex < rawNewIndex && droppingAboveTargetCenter
+          ? Math.max(0, rawNewIndex - 1)
+          : rawNewIndex
       const newOrder = arrayMove(currentIds, oldIndex, newIndex)
       setLocalTaskOrder((prev) => ({ ...prev, [bucketId]: newOrder }))
       await reorderTasksInBucket(projectId, bucketId, newOrder).catch(console.error)
