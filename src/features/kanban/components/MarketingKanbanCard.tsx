@@ -52,6 +52,28 @@ const STATUS_DOT: Record<string, string> = {
   todo: 'var(--eh-muted-2)',
   in_progress: '#3b82f6',
   done: '#22c55e',
+  atrasado: '#ef4444',
+}
+
+/**
+ * Opções do seletor de status do card. Só os três estados que o usuário
+ * escolhe à mão — `atrasado` fica de fora de propósito: ele é atribuído
+ * automaticamente quando o prazo vence (`applyLazyOverdueTransition`) e
+ * oferecê-lo aqui como escolha manual quebraria essa reversão automática.
+ * Uma tarefa atrasada continua mostrando o rótulo correto no menu, e
+ * escolher qualquer opção daqui a tira do estado atrasado.
+ */
+const CARD_STATUS_OPTIONS: { value: PMTask['status']; label: string }[] = [
+  { value: 'todo', label: 'A fazer' },
+  { value: 'in_progress', label: 'Em andamento' },
+  { value: 'done', label: 'Concluída' },
+]
+
+const CARD_STATUS_LABEL: Record<string, string> = {
+  todo: 'A fazer',
+  in_progress: 'Em andamento',
+  done: 'Concluída',
+  atrasado: 'Atrasado',
 }
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -112,6 +134,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   buckets,
   allBuckets,
   onMove,
+  onChangeStatus,
   onClone,
   onDelete,
   onToggleArchive,
@@ -142,6 +165,11 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   onDelete?: () => void
   /** Chamado quando o usuário alterna arquivado/desarquivado. Ausente = item não aparece no menu (Marketing/Administrativo, sem UI de arquivamento por card ainda pedida). */
   onToggleArchive?: () => void
+  /**
+   * Chamado quando o usuário escolhe outro status no seletor do card.
+   * Ausente = o seletor não aparece.
+   */
+  onChangeStatus?: (next: PMTask['status']) => void
   /** Tarefa alvo de um link "Minhas Tarefas" — recebe pulso visual temporário. */
   highlighted?: boolean
   /** Usuários do workspace, para resolver foto de perfil dos responsáveis. Sem essa lista, cai no fallback de iniciais. */
@@ -163,7 +191,7 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   // Menu de 3 pontos (⋯)
   const [cardMenuOpen, setCardMenuOpen] = useState(false)
-  const [cardMenuMode, setCardMenuMode] = useState<null | 'move' | 'clone'>(null)
+  const [cardMenuMode, setCardMenuMode] = useState<null | 'move' | 'clone' | 'status'>(null)
   const cardMenuBtnRef = useRef<HTMLButtonElement>(null)
   const cardMenuPopRef = useRef<HTMLDivElement>(null)
   const [cardMenuPos, setCardMenuPos] = useState({ top: 0, left: 0 })
@@ -501,7 +529,62 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
                   maxWidth: 240,
                 }}
               >
-                {cardMenuMode === 'move' ? (
+                {cardMenuMode === 'status' ? (
+                  /* Seletor de status da tarefa */
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 2px' }}>
+                      <button
+                        data-card-menu=""
+                        onClick={(e) => { e.stopPropagation(); setCardMenuMode(null) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--eh-text-3)', fontSize: 12, padding: 0, lineHeight: 1 }}
+                        aria-label="Voltar"
+                      >←</button>
+                      <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--eh-text-3)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Status
+                      </p>
+                    </div>
+                    {CARD_STATUS_OPTIONS.map((opt) => {
+                      const selecionado = task.status === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          data-card-menu=""
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (!selecionado) onChangeStatus?.(opt.value)
+                            setCardMenuOpen(false)
+                            setCardMenuMode(null)
+                          }}
+                          style={{
+                            ...subMenuBtnStyle,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            ...(selecionado ? { color: 'var(--eh-text-strong)', fontWeight: 600 } : {}),
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--eh-bg)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              flexShrink: 0,
+                              background: STATUS_DOT[opt.value] ?? 'var(--eh-muted-2)',
+                            }}
+                          />
+                          {opt.label}
+                          {/* Marca a opção vigente: o ponto colorido sozinho
+                              diz qual é o status, não qual está selecionado. */}
+                          {selecionado && (
+                            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--eh-text-3)' }}>✓</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </>
+                ) : cardMenuMode === 'move' ? (
                   /* Seletor de coluna de destino para mover */
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 2px' }}>
@@ -585,6 +668,29 @@ export const MarketingKanbanCard = memo(function MarketingKanbanCard({
                 ) : (
                   /* Menu principal */
                   <>
+                    {onChangeStatus && (
+                      <button
+                        data-card-menu=""
+                        onClick={(e) => { e.stopPropagation(); setCardMenuMode('status') }}
+                        style={mainMenuBtnStyle}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--eh-bg)'; e.currentTarget.style.color = 'var(--eh-text-strong)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--eh-text-2)' }}
+                      >
+                        <span
+                          style={{
+                            width: 9,
+                            height: 9,
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                            background: STATUS_DOT[task.status] ?? 'var(--eh-muted-2)',
+                          }}
+                        />
+                        Status: {CARD_STATUS_LABEL[task.status] ?? task.status}
+                      </button>
+                    )}
+                    {onChangeStatus && (onMove || onClone || onToggleArchive || onDelete) && (
+                      <div style={{ height: 1, background: 'var(--eh-border)', margin: '4px 0' }} />
+                    )}
                     {onMove && buckets && buckets.length > 0 && (
                       <button
                         data-card-menu=""

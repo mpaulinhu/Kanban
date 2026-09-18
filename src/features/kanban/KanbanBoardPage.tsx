@@ -30,7 +30,7 @@ import {
   updateChecklistItemTitle,
   deletePMTask,
 } from './api/marketingPlannerApi'
-import { deletePMBucket } from './api/pmOfficeApi'
+import { deletePMBucket, updatePMTask } from './api/pmOfficeApi'
 import { usePmAudit } from './hooks/usePmAudit'
 import { diffFields } from './utils/diffFields'
 import { MarketingKanbanCard } from './components/MarketingKanbanCard'
@@ -1172,6 +1172,82 @@ export function KanbanBoardPage() {
    * transição oposta, e mostra erro em linguagem humana se a escrita falhar
    * (em vez de só `console.error`, que o usuário nunca vê).
    */
+  /**
+   * Troca o status pelo seletor do próprio card, sem abrir o modal.
+   *
+   * Reproduz os efeitos colaterais que `TaskDetailModal.handleSave` aplica ao
+   * concluir/reabrir, porque uma tarefa concluída por aqui tem que ficar no
+   * mesmo estado de uma concluída por lá:
+   *  - `progress` 100 ao concluir e 0 ao voltar para "A fazer" (em andamento
+   *    preserva o progresso que já existia);
+   *  - checklist inteiro marcado como finalizado na transição para `done`;
+   *  - `previousStatusBeforeAtrasado` descartado, já que esta é uma escolha
+   *    MANUAL — sem isso, uma reversão automática posterior (prazo adiado)
+   *    desfaria o que o usuário escolheu à mão;
+   *  - `markTaskDone` para tarefa recorrente com prazo, que gera a próxima
+   *    ocorrência.
+   *
+   * Concluir não move a tarefa de coluna: ela sai da lista principal e passa a
+   * aparecer na seção "Tarefas concluídas" no rodapé da MESMA coluna, porque é
+   * `doneTasksByBucket` que agrupa por `bucketId`.
+   */
+  async function handleChangeTaskStatus(task: PMTask, next: PMTask['status']) {
+    if (!projectId || next === task.status) return
+    const previousStatus = task.status
+    const wasDone = previousStatus === 'done'
+    const isDone = next === 'done'
+
+    const patch: Record<string, unknown> = { status: next }
+    if (isDone) patch.progress = 100
+    else if (next === 'todo') patch.progress = 0
+    if (isDone && (task.checklist?.length ?? 0) > 0) {
+      patch.checklist = (task.checklist ?? []).map((item) => ({
+        ...item,
+        isChecked: true,
+        status: 'finalizado' as const,
+      }))
+      patch.checklistDone = task.checklist?.length ?? 0
+    }
+
+    // Optimistic update: o card reage na hora, sem esperar o round-trip.
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? ({ ...t, ...patch } as PMTask) : t)),
+    )
+
+    try {
+      await updatePMTask(projectId, task.bucketId, task.id, patch, {
+        clearPreviousStatusBeforeAtrasado: !!task.previousStatusBeforeAtrasado,
+      })
+      audit.logTask(
+        isDone && !wasDone
+          ? 'pm_task.done'
+          : !isDone && wasDone
+            ? 'pm_task.undone'
+            : 'pm_task.update',
+        { id: task.id, title: task.title },
+        {
+          bucketId: task.bucketId,
+          bucketName: buckets.find((b) => b.id === task.bucketId)?.name,
+          changes: [{ field: 'status', before: previousStatus, after: next }],
+        },
+      )
+      if (isDone && !wasDone && task.recurrence && task.dueDate) {
+        markTaskDone(projectId, task.bucketId, { ...task, ...patch } as PMTask).catch(console.error)
+      }
+    } catch (err) {
+      console.error('[changeTaskStatus] falhou ao mudar status:', err)
+      // Reverte o optimistic update — deixar o card mostrando um status que
+      // não foi gravado é pior que não ter mudado nada.
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? task : t)),
+      )
+      setArchiveToast({
+        message: 'Não foi possível mudar o status da tarefa. Tente novamente.',
+        variant: 'error',
+      })
+    }
+  }
+
   async function handleToggleArchive(task: PMTask) {
     if (!projectId) return
     const nextArchived = !task.archived
@@ -1833,6 +1909,7 @@ export function KanbanBoardPage() {
                           area={area}
                           labelsById={labelsById}
                           onToggleArchive={projectId ? () => void handleToggleArchive(task) : undefined}
+                          onChangeStatus={projectId && canWrite ? (next) => void handleChangeTaskStatus(task, next) : undefined}
                         />
                       ))}
                     </SortableContext>
@@ -1888,6 +1965,7 @@ export function KanbanBoardPage() {
                               area={area}
                               labelsById={labelsById}
                               onToggleArchive={projectId ? () => void handleToggleArchive(task) : undefined}
+                              onChangeStatus={projectId && canWrite ? (next) => void handleChangeTaskStatus(task, next) : undefined}
                             />
                           </div>
                         ))}
