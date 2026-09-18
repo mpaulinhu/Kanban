@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { InlineDateCellPopup } from './InlineDateCellPopup'
 import type { ChecklistItem, MarketingTaskTemplate, PMOfficeLabel, PMTask, RecurrenceConfig } from '../types/pmOffice'
@@ -34,6 +34,26 @@ function toDate(ts: unknown): Date | null {
 export function dateToTs(d: Date | null): Timestamp | null {
   if (!d) return null
   return tsFromDate(d)
+}
+
+/**
+ * Cores do chip de status do CABEÇALHO do modal — deliberadamente separadas
+ * de `PM_STATUS_CFG` (utils/index.ts), que é usado em vários outros lugares
+ * do app (barra de progresso, ponto de status do card) com `in_progress` em
+ * azul. Trocar `PM_STATUS_CFG` para laranja mudaria essas outras telas junto;
+ * este mapa vale só para o chip, então o laranja pedido para "Em andamento"
+ * fica isolado aqui sem efeito colateral em nenhum outro componente.
+ *
+ * Também cobre `atrasado`, que `PM_STATUS_CFG` não tem (o chip do card caía
+ * no fallback `todo` e sobrescrevia só a cor do texto para vermelho,
+ * deixando o fundo cinza — inconsistente com as outras três opções, que têm
+ * fundo E texto no mesmo tom).
+ */
+const STATUS_CHIP_CFG: Record<PMTask['status'], { bg: string; fg: string; dot: string }> = {
+  todo:        { bg: 'var(--eh-surface-2)',                                    fg: 'var(--eh-text-2)', dot: 'var(--eh-muted-2)' },
+  in_progress: { bg: 'color-mix(in srgb, #f97316 16%, transparent)',           fg: '#c2410c',           dot: '#f97316' },
+  done:        { bg: 'color-mix(in srgb, #22a35a 14%, transparent)',           fg: '#15803d',           dot: '#22a35a' },
+  atrasado:    { bg: 'color-mix(in srgb, #ef4444 14%, transparent)',           fg: '#b91c1c',           dot: '#ef4444' },
 }
 
 const STATUS_OPTIONS: { value: PMTask['status']; label: string }[] = [
@@ -522,9 +542,47 @@ export function TaskDetailModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
+  // Popover custom do chip de status do cabeçalho — mesmo mecanismo do menu
+  // "⋯" do card (MarketingKanbanCard): portal + posicionamento via
+  // getBoundingClientRect + fechamento ao clicar fora. Existe porque um
+  // <select> nativo não dá pra estilizar (bolinha colorida por opção, ✓ na
+  // vigente, cantos/sombra no padrão do resto do app).
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  const statusChipRef = useRef<HTMLButtonElement>(null)
+  const statusMenuPopRef = useRef<HTMLDivElement>(null)
+  const [statusMenuPos, setStatusMenuPos] = useState({ top: 0, left: 0 })
   // Falhas de exclusão passam a ser visíveis em vez de engolidas.
   const [deleteTaskError, setDeleteTaskError] = useState<string | null>(null)
   const [deleteTaskLoading, setDeleteTaskLoading] = useState(false)
+
+  // Fecha o popover de status ao clicar fora
+  useEffect(() => {
+    if (!statusMenuOpen) return
+    function onOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (target.closest('[data-status-menu]')) return
+      setStatusMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [statusMenuOpen])
+
+  // Posiciona o popover de status via portal — mesmo cálculo do menu ⋯ do card
+  useLayoutEffect(() => {
+    if (!statusMenuOpen || !statusMenuPopRef.current || !statusChipRef.current) return
+    const popRect = statusMenuPopRef.current.getBoundingClientRect()
+    const btnRect = statusChipRef.current.getBoundingClientRect()
+    const GAP = 4
+    let top = btnRect.bottom + GAP
+    let left = btnRect.left
+    if (top + popRect.height + 8 > window.innerHeight) {
+      top = Math.max(8, btnRect.top - popRect.height - GAP)
+    }
+    if (left + popRect.width + 8 > window.innerWidth) {
+      left = Math.max(8, window.innerWidth - popRect.width - 8)
+    }
+    setStatusMenuPos({ top, left })
+  }, [statusMenuOpen])
 
   useEffect(() => {
     if (!task) return
@@ -931,51 +989,98 @@ export function TaskDetailModal({
                     {bucketName.toUpperCase()}
                   </span>
                 ) : null}
-                {/* Chip de status — ESTE sim é clicável: `<select>` nativo
-                    transparente sobreposto ao chip visual (mesma técnica do
-                    resto do app para controles que precisam parecer um chip
-                    mas abrir uma lista nativa, acessível por teclado sem
-                    reimplementar popover/portal). Grava na hora via
-                    `saveStatus`, sem esperar o Salvar do formulário — troquei
-                    o antigo <select> de status do corpo do modal por este,
-                    não duplica o campo. */}
+                {/* Chip de status — ESTE sim é clicável: popover custom (não
+                    <select> nativo, que não dá pra estilizar) no mesmo padrão
+                    visual do menu "⋯" do card — portal, cantos arredondados,
+                    sombra, bolinha colorida por opção, ✓ na vigente. Grava na
+                    hora via `saveStatus`, sem esperar o Salvar do formulário —
+                    substituiu o <select> de status que ficava no corpo do
+                    modal, não duplica o campo. */}
                 {isEditable && !readOnly && !rawStatusOptions && !task.rawStatus && !ACCESSIBILITY_RAW_OPTIONS[task.title] ? (
-                  <span className="relative shrink-0 inline-flex items-center">
-                    <span
-                      aria-hidden="true"
-                      className="inline-flex items-center gap-1 font-semibold px-2 py-1 pointer-events-none"
+                  <>
+                    <button
+                      ref={statusChipRef}
+                      type="button"
+                      data-status-menu=""
+                      onClick={() => setStatusMenuOpen((v) => !v)}
+                      className="shrink-0 inline-flex items-center gap-1 font-semibold px-2 py-1 border-0 cursor-pointer"
                       style={{
-                        background: (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).bg,
-                        color: status === 'atrasado' ? '#b91c1c' : (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).fg,
+                        background: STATUS_CHIP_CFG[status].bg,
+                        color: STATUS_CHIP_CFG[status].fg,
                         borderRadius: 4,
                         fontSize: 12,
                       }}
                     >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_CHIP_CFG[status].dot, flexShrink: 0 }} />
                       {STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9" />
                       </svg>
-                    </span>
-                    <select
-                      aria-label="Status da tarefa"
-                      value={status}
-                      onChange={(e) => void saveStatus(e.target.value as PMTask['status'])}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      style={{ fontSize: 12 }}
-                    >
-                      {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </span>
+                    </button>
+                    {statusMenuOpen && createPortal(
+                      <div
+                        ref={statusMenuPopRef}
+                        data-status-menu=""
+                        style={{
+                          position: 'fixed',
+                          top: statusMenuPos.top,
+                          left: statusMenuPos.left,
+                          zIndex: 9999,
+                          background: 'var(--eh-surface)',
+                          border: '1px solid var(--eh-border)',
+                          borderRadius: 8,
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+                          padding: 4,
+                          minWidth: 168,
+                        }}
+                      >
+                        {STATUS_OPTIONS.map((opt) => {
+                          const selecionado = status === opt.value
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              data-status-menu=""
+                              onClick={() => { if (!selecionado) void saveStatus(opt.value); setStatusMenuOpen(false) }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 7,
+                                width: '100%',
+                                textAlign: 'left',
+                                fontSize: 12.5,
+                                fontWeight: selecionado ? 600 : 500,
+                                color: selecionado ? 'var(--eh-text-strong)' : 'var(--eh-text-2)',
+                                background: 'transparent',
+                                padding: '6px 8px',
+                                borderRadius: 5,
+                                border: 'none',
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--eh-bg)' }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                            >
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: STATUS_CHIP_CFG[opt.value].dot }} />
+                              {opt.label}
+                              {selecionado && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--eh-text-3)' }}>✓</span>}
+                            </button>
+                          )
+                        })}
+                      </div>,
+                      document.body,
+                    )}
+                  </>
                 ) : (
                   <span
-                    className="shrink-0 font-semibold px-2 py-1"
+                    className="shrink-0 inline-flex items-center gap-1 font-semibold px-2 py-1"
                     style={{
-                      background: (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).bg,
-                      color: status === 'atrasado' ? '#b91c1c' : (PM_STATUS_CFG[status as keyof typeof PM_STATUS_CFG] ?? PM_STATUS_CFG.todo).fg,
+                      background: STATUS_CHIP_CFG[status].bg,
+                      color: STATUS_CHIP_CFG[status].fg,
                       borderRadius: 4,
                       fontSize: 12,
                     }}
                   >
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_CHIP_CFG[status].dot, flexShrink: 0 }} />
                     {STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}
                   </span>
                 )}
