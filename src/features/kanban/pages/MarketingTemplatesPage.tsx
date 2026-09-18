@@ -16,6 +16,8 @@ import {
   updateMarketingTemplate,
 } from '../api/marketingPlannerApi'
 import { usePmAudit } from '../hooks/usePmAudit'
+import { usersApi, type UserRecord } from '../api/usersApi'
+import { TeamModal } from '../components/TeamModal'
 
 // Seed gerenciado centralmente em marketingPlannerApi.ts
 
@@ -778,20 +780,45 @@ function NewTemplateModal({ onClose, onCreate, bucketNames }: NewTemplateModalPr
 
 // ── Componente de navegação ───────────────────────────────────────────────────
 
-function NavButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+/**
+ * Idêntico ao `NavButton` de `KanbanBoardPage.tsx`/`MarketingCalendarioPage.tsx`
+ * — mesmo componente, duplicado porque as três telas não compartilham um
+ * módulo de UI comum ainda. `pedagogia`: botões do header transparentes
+ * sobre o fundo gradiente, com texto branco, ganhando fundo translúcido só
+ * no hover (classe `.eh-pm-header-btn`). Sem essa prop (versão anterior
+ * deste componente), os botões saíam sólidos sobre um header já escuro,
+ * ilegíveis.
+ */
+function NavButton({ label, active, onClick, pedagogia = false }: { label: string; active: boolean; onClick: () => void; pedagogia?: boolean }) {
   return (
     <button
       onClick={onClick}
-      style={{
-        padding: '6px 18px',
-        borderRadius: 7,
-        fontSize: 13,
-        fontWeight: 500,
-        border: `1px solid ${active ? 'var(--eh-primary)' : 'var(--eh-border)'}`,
-        background: active ? 'var(--eh-primary)' : 'var(--eh-surface)',
-        color: active ? '#fff' : 'var(--eh-text-3)',
-        cursor: 'pointer',
-      }}
+      className={pedagogia ? 'eh-pm-header-btn' : undefined}
+      data-active={pedagogia ? active : undefined}
+      style={
+        pedagogia
+          ? {
+              padding: '6px 18px',
+              borderRadius: 7,
+              fontSize: 13,
+              fontWeight: 500,
+              border: '1px solid transparent',
+              color: 'var(--eh-pm-header-fg)',
+              cursor: 'pointer',
+              transition: 'background .12s, border-color .12s',
+            }
+          : {
+              padding: '6px 18px',
+              borderRadius: 7,
+              fontSize: 13,
+              fontWeight: 500,
+              border: `1px solid ${active ? 'var(--eh-primary)' : 'var(--eh-border)'}`,
+              background: active ? 'var(--eh-primary)' : 'var(--eh-surface)',
+              color: active ? '#fff' : 'var(--eh-text-3)',
+              cursor: 'pointer',
+              transition: 'background .12s, border-color .12s',
+            }
+      }
     >
       {label}
     </button>
@@ -836,12 +863,15 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
   const canWrite = canWriteScreen()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [projectTitle, setProjectTitle] = useState(DEFAULT_TITLE[area])
+  const [projectTeam, setProjectTeam] = useState<string[]>([])
   const [bucketNames, setBucketNames] = useState<string[]>([])
   const [templates, setTemplates] = useState<MarketingTaskTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [teamModalOpen, setTeamModalOpen] = useState(false)
 
   useEffect(() => {
     // Para 'marketing' resolve exatamente como antes (via
@@ -850,8 +880,15 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
     void getOrCreateAreaProject(area).then((proj) => {
       setProjectId(proj.id)
       if (proj.title) setProjectTitle(proj.title)
+      if (proj.team) setProjectTeam(proj.team)
     })
   }, [area])
+
+  // Usa usersApi.listUsers() (sem includeInactive) — mesmo padrão do Quadro
+  // e do Calendário.
+  useEffect(() => {
+    usersApi.listUsers().then(setUsers).catch(() => undefined)
+  }, [])
 
   // Carrega buckets do projeto para popular as opções de categoria dinamicamente
   useEffect(() => {
@@ -906,12 +943,28 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
 
   const canSeeTemplates = true
 
+  // Mesmo fundo gradiente do Quadro/Calendário (`--eh-pm-board-bg`, ver
+  // globals.css) — as três telas são `area === 'pedagogia'`, a única
+  // montada neste app.
+  const isPedagogia = area === 'pedagogia'
+
+  // A casca do app (`AppShell.tsx`) é global e aplica 24px de padding + fundo
+  // `--eh-bg` no `<main>` que envolve QUALQUER página — NÃO tocado aqui de
+  // propósito. Compensado só localmente, com margem negativa do tamanho do
+  // padding do pai + crescimento equivalente em largura/altura — técnica
+  // idêntica ao `pageStyle` do Quadro e do Calendário. Sem isso o gradiente
+  // para na altura do conteúdo (a lista de templates é mais baixa que a
+  // viewport) e expõe o cinza do `<main>` por baixo.
+  const PEDAGOGIA_MAIN_PADDING_PX = 24
   const pageStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
+    height: isPedagogia ? '100vh' : '100%',
     minHeight: 0,
-    background: 'var(--eh-bg)',
+    width: isPedagogia ? `calc(100% + ${PEDAGOGIA_MAIN_PADDING_PX * 2}px)` : undefined,
+    margin: isPedagogia ? `-${PEDAGOGIA_MAIN_PADDING_PX}px` : undefined,
+    overflow: isPedagogia ? 'hidden' : undefined,
+    background: isPedagogia ? 'var(--eh-pm-board-bg)' : 'var(--eh-bg)',
   }
 
   const headerStyle: CSSProperties = {
@@ -919,29 +972,35 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
     alignItems: isMobile ? 'stretch' : 'center',
     flexDirection: isMobile ? 'column' : 'row',
     justifyContent: 'space-between',
-    padding: isMobile ? '12px 12px 10px' : '16px 24px 12px',
-    background: 'var(--eh-surface)',
-    borderBottom: '1px solid var(--eh-border)',
+    padding: isMobile ? '12px 12px 10px' : isPedagogia ? '0 24px' : '16px 24px 12px',
+    height: isMobile || !isPedagogia ? undefined : 48,
+    // Barra fundida com o gradiente (fundo translúcido, sem borda) — mesmo
+    // padrão do header do Quadro/Calendário.
+    background: isPedagogia ? 'rgba(0,0,0,0.2)' : 'var(--eh-surface)',
+    borderBottom: isPedagogia ? 'none' : '1px solid var(--eh-border)',
     flexShrink: 0,
     gap: isMobile ? 10 : 16,
   }
 
   return (
     <div style={pageStyle}>
-      {/* HEADER — idêntico ao Quadro, sem campo de busca */}
+      {/* HEADER — mesmo estilo do Quadro/Calendário (gradiente + overlay
+          translúcido), sem campo de busca (não há o que buscar por texto
+          aqui: templates não têm data/responsável para filtrar). */}
       <div style={headerStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--eh-text-strong)' }}>
+          <h1 style={{ margin: 0, fontSize: isPedagogia ? 16 : 17, fontWeight: isPedagogia ? 600 : 700, color: isPedagogia ? 'var(--eh-pm-header-fg)' : 'var(--eh-text-strong)' }}>
             {projectTitle}
           </h1>
         </div>
         {/* Sem overflowX aqui, as 4 abas empurravam a largura da página inteira
             e criavam scroll horizontal global (mesmo tratamento do Calendário). */}
         <div style={{ display: 'flex', gap: 4, overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? 2 : undefined }}>
-          <NavButton label="Quadro" active={false} onClick={() => navigate(`${navBase}/quadro`)} />
-          <NavButton label="Calendário" active={false} onClick={() => navigate(`${navBase}/calendario`)} />
+          <NavButton label="Quadro" active={false} onClick={() => navigate(`${navBase}/quadro`)} pedagogia={isPedagogia} />
+          <NavButton label="Calendário" active={false} onClick={() => navigate(`${navBase}/calendario`)} pedagogia={isPedagogia} />
+          <NavButton label="Equipe" active={false} onClick={() => setTeamModalOpen(true)} pedagogia={isPedagogia} />
           {canSeeTemplates && (
-            <NavButton label="Templates" active={true} onClick={() => undefined} />
+            <NavButton label="Templates" active={true} onClick={() => undefined} pedagogia={isPedagogia} />
           )}
         </div>
       </div>
@@ -960,11 +1019,17 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
           }}
         >
           <div>
+            {/* Título/subtítulo em branco quando `isPedagogia` — a cor
+                original (`--eh-text`/`--eh-text-2`) é escura, pensada pra
+                fundo claro. Sobre o gradiente do header (a área da seção fica
+                ainda dentro dele — só os CARDS de template abaixo são
+                brancos), esse cinza escuro reprovava contraste feio de ver
+                (ficava com aspecto "desbotado", quase ilegível). */}
             <h1
               style={{
                 fontSize: 22,
                 fontWeight: 700,
-                color: 'var(--eh-text)',
+                color: isPedagogia ? 'var(--eh-pm-header-fg)' : 'var(--eh-text)',
                 letterSpacing: '-0.02em',
                 margin: 0,
               }}
@@ -974,7 +1039,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
             <p
               style={{
                 fontSize: 13.5,
-                color: 'var(--eh-text-2)',
+                color: isPedagogia ? 'var(--eh-pm-header-fg-muted)' : 'var(--eh-text-2)',
                 margin: '5px 0 0',
               }}
             >
@@ -1025,7 +1090,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
             alignItems: 'center',
             justifyContent: 'center',
             height: 200,
-            color: 'var(--eh-muted-2)',
+            color: isPedagogia ? 'var(--eh-pm-header-fg-muted)' : 'var(--eh-muted-2)',
             fontSize: 13.5,
           }}
         >
@@ -1057,7 +1122,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
               style={{
                 padding: '48px 0',
                 textAlign: 'center',
-                color: 'var(--eh-muted-2)',
+                color: isPedagogia ? 'var(--eh-pm-header-fg-muted)' : 'var(--eh-muted-2)',
                 fontSize: 13.5,
               }}
             >
@@ -1072,7 +1137,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
                 fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: 'var(--eh-muted-2)',
+                color: isPedagogia ? 'var(--eh-pm-header-fg-muted)' : 'var(--eh-muted-2)',
                 padding: '4px 0 6px',
               }}
             >
@@ -1100,7 +1165,7 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
                 fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: 'var(--eh-muted-2)',
+                color: isPedagogia ? 'var(--eh-pm-header-fg-muted)' : 'var(--eh-muted-2)',
                 padding: '12px 0 6px',
               }}
             >
@@ -1133,6 +1198,19 @@ export function MarketingTemplatesPage({ area = 'pedagogia' }: { area?: 'marketi
       )}
       </div>
       </div>
+
+      {/* MODAL EQUIPE — mesma equipe do Quadro e do Calendário, mesmo
+          projeto (`getOrCreateAreaProject` resolve o mesmo `projectId` nas
+          três telas). */}
+      <TeamModal
+        open={teamModalOpen}
+        projectId={projectId}
+        users={users}
+        team={projectTeam}
+        onClose={() => setTeamModalOpen(false)}
+        onSave={(newTeam) => setProjectTeam(newTeam)}
+        onUsersChange={setUsers}
+      />
     </div>
   )
 }
