@@ -239,14 +239,22 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave, onUse
           />
         </div>
 
-        {/* Criar nova conta — colapsado por padrão, expande sob demanda.
-            Fica logo abaixo da busca (não só quando ela não acha ninguém):
-            descobrível sem depender de o usuário já ter tentado e falhado. */}
+        {/* Criar nova conta — ÚNICO ponto de entrada (antes havia um segundo
+            "+ Criar conta" na lista vazia; os dois apareciam juntos quando a
+            busca não achava ninguém, redundante). Fica logo abaixo da busca,
+            sempre visível: descobrível sem depender de a busca já ter
+            falhado. */}
         <div style={{ padding: '0 24px 8px', flexShrink: 0 }}>
           {!creatingUser ? (
             <button
               type="button"
-              onClick={() => setCreatingUser(true)}
+              onClick={() => {
+                setCreatingUser(true)
+                // Busca sem resultado costuma ser um nome — pré-preenche o
+                // campo de nome pra não obrigar a pessoa a digitar de novo o
+                // que já tinha digitado na busca.
+                if (q && filtered.length === 0 && !newName) setNewName(search.trim())
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
@@ -337,30 +345,14 @@ export function TeamModal({ open, projectId, users, team, onClose, onSave, onUse
         {/* Lista de usuários */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 8px' }}>
           {filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <p style={{ margin: '0 0 6px', color: 'var(--eh-text-2)', fontSize: 13 }}>
-                Nenhum usuário encontrado{q ? ` para "${search.trim()}"` : ''}.
-              </p>
-              {!creatingUser && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreatingUser(true)
-                    // Busca vazia costuma ser um nome — pré-preenche o campo
-                    // de nome pra não obrigar a pessoa a digitar de novo o
-                    // que já tinha digitado na busca.
-                    if (q && !newName) setNewName(search.trim())
-                  }}
-                  style={{
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-                    color: 'var(--eh-primary)', background: 'none', border: 'none',
-                    cursor: 'pointer', padding: '2px 4px',
-                  }}
-                >
-                  + Criar conta{q ? ` para "${search.trim()}"` : ''}
-                </button>
-              )}
-            </div>
+            // Só a mensagem aqui — o botão de criar conta é único, fixo
+            // logo abaixo da busca ("+ Criar nova conta"). Ter um segundo
+            // "Criar conta" neste vazio virou redundância visual quando os
+            // dois apareciam ao mesmo tempo, sem ganho real (o de cima já
+            // pré-preenche o nome a partir da busca).
+            <p style={{ textAlign: 'center', color: 'var(--eh-text-2)', fontSize: 13, padding: '20px 0', margin: 0 }}>
+              Nenhum usuário encontrado{q ? ` para "${search.trim()}"` : ''}.
+            </p>
           ) : (
             filtered.map((u) => {
               const checked = selected.has(u.uid)
