@@ -1386,6 +1386,17 @@ export function MarketingCalendarioPage({ area = 'pedagogia' }: { area?: 'market
           users={users}
           showRecurrence
           readOnly={!canWrite}
+          // `area` é o que ativa o modo "documento" (chip de status no
+          // cabeçalho, checklist, anexos, comentários) — sem essa prop o
+          // modal caía no formulário "clássico" (Título/Observações/Início/
+          // Término/Atribuídos em campos soltos), diferente do que o Quadro
+          // mostra pra MESMA tarefa. `bucketName` fica de fora de propósito:
+          // esta tela não tem conceito de coluna (é organizada por data, não
+          // por bucket) — sem essa prop o modal só deixa de mostrar o chip
+          // da coluna no cabeçalho, o resto do modo documento funciona igual.
+          area={area}
+          labelsById={labelsById}
+          projectName={projectTitle}
           onClose={() => { setModalOpen(false); setExpandedTaskId(null) }}
           onSave={(updated) => {
             setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
